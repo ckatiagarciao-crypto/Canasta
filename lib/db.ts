@@ -2,6 +2,17 @@ import { createClient } from "@/lib/supabase/client";
 import { CATALOGO_BASE } from "@/lib/catalogoBase";
 import type { CanastaGuardada, Emisor, EstadoCanasta, Producto } from "@/lib/tipos";
 
+const BUCKET_FOTOS = "fotos-productos";
+const PATH_CAJA_FONDO_PREFIJO = "_fondo-caja";
+
+function extensionDe(file: File): string {
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  if (file.type === "image/jpeg") return "jpg";
+  const porNombre = file.name.split(".").pop();
+  return porNombre ? porNombre.toLowerCase() : "jpg";
+}
+
 export async function listarProductos(): Promise<Producto[]> {
   const supabase = createClient();
   const { data, error } = await supabase.from("productos").select("*").order("cod");
@@ -26,6 +37,46 @@ export async function eliminarProducto(id: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("productos").delete().eq("id", id);
   if (error) throw error;
+}
+
+export async function subirFotoProducto(producto: Producto, file: File): Promise<string> {
+  const supabase = createClient();
+  const path = `${producto.cod}.${extensionDe(file)}`;
+  const { error: errSubida } = await supabase.storage.from(BUCKET_FOTOS).upload(path, file, { upsert: true });
+  if (errSubida) throw errSubida;
+  const { error: errUpdate } = await supabase.from("productos").update({ foto_url: path }).eq("id", producto.id);
+  if (errUpdate) throw errUpdate;
+  return path;
+}
+
+export async function eliminarFotoProducto(producto: Producto): Promise<void> {
+  const supabase = createClient();
+  if (producto.foto_url) {
+    await supabase.storage.from(BUCKET_FOTOS).remove([producto.foto_url]);
+  }
+  const { error } = await supabase.from("productos").update({ foto_url: null }).eq("id", producto.id);
+  if (error) throw error;
+}
+
+export async function subirCajaFondo(file: File): Promise<string> {
+  const supabase = createClient();
+  const path = `${PATH_CAJA_FONDO_PREFIJO}.${extensionDe(file)}`;
+  const { error } = await supabase.storage.from(BUCKET_FOTOS).upload(path, file, { upsert: true });
+  if (error) throw error;
+  return path;
+}
+
+export async function urlsFirmadas(paths: string[]): Promise<Record<string, string>> {
+  const rutas = [...new Set(paths.filter(Boolean))];
+  if (!rutas.length) return {};
+  const supabase = createClient();
+  const { data, error } = await supabase.storage.from(BUCKET_FOTOS).createSignedUrls(rutas, 60 * 60 * 24 * 7);
+  if (error) throw error;
+  const mapa: Record<string, string> = {};
+  (data ?? []).forEach((d) => {
+    if (d.path && d.signedUrl) mapa[d.path] = d.signedUrl;
+  });
+  return mapa;
 }
 
 export async function restaurarCatalogoBase(): Promise<Producto[]> {
@@ -197,7 +248,7 @@ export async function obtenerEmisor(): Promise<Emisor> {
   const supabase = createClient();
   const { data, error } = await supabase.from("emisor").select("*").limit(1).maybeSingle();
   if (error) throw error;
-  if (!data) return { id: "", razon: "", ruc: "", telefonos: "", correo: "", color: "verde", logoUrl: "" };
+  if (!data) return { id: "", razon: "", ruc: "", telefonos: "", correo: "", color: "verde", logoUrl: "", cajaFondoPath: "" };
   return {
     id: data.id,
     razon: data.razon ?? "",
@@ -206,12 +257,21 @@ export async function obtenerEmisor(): Promise<Emisor> {
     correo: data.correo ?? "",
     color: (data.color as "verde" | "azul") ?? "verde",
     logoUrl: data.logo_url ?? "",
+    cajaFondoPath: data.caja_fondo_url ?? "",
   };
 }
 
 export async function guardarEmisor(e: Emisor): Promise<Emisor> {
   const supabase = createClient();
-  const fila = { razon: e.razon, ruc: e.ruc, telefonos: e.telefonos, correo: e.correo, color: e.color, logo_url: e.logoUrl || null };
+  const fila = {
+    razon: e.razon,
+    ruc: e.ruc,
+    telefonos: e.telefonos,
+    correo: e.correo,
+    color: e.color,
+    logo_url: e.logoUrl || null,
+    caja_fondo_url: e.cajaFondoPath || null,
+  };
   if (e.id) {
     const { error } = await supabase.from("emisor").update(fila).eq("id", e.id);
     if (error) throw error;

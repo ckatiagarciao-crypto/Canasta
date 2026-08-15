@@ -7,6 +7,7 @@ export type Producto = {
   caja: number;
   precio_caja: number;
   precio_unitario: number;
+  foto_url: string;
 };
 
 export type ItemCanasta = {
@@ -54,6 +55,7 @@ export type Emisor = {
   correo: string;
   color: "verde" | "azul";
   logoUrl: string;
+  cajaFondoPath: string;
 };
 
 export type CanastaGuardada = EstadoCanasta & {
@@ -112,5 +114,5 @@ export function nuevoEstado(): EstadoCanasta {
 }
 
 export function nuevoEmisor(): Emisor {
-  return { id: "", razon: "", ruc: "", telefonos: "", correo: "", color: "verde", logoUrl: "" };
+  return { id: "", razon: "", ruc: "", telefonos: "", correo: "", color: "verde", logoUrl: "", cajaFondoPath: "" };
 }

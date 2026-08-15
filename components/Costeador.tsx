@@ -18,9 +18,14 @@ import {
   eliminarCanasta,
   obtenerEmisor,
   guardarEmisor,
+  subirFotoProducto,
+  eliminarFotoProducto,
+  subirCajaFondo,
+  urlsFirmadas,
 } from "@/lib/db";
 import { CATEGORIAS, nuevoEstado, nuevoEmisor } from "@/lib/tipos";
 import type { CanastaGuardada, Emisor, EstadoCanasta, ItemCanasta, Producto } from "@/lib/tipos";
+import EditorCollage from "@/components/EditorCollage";
 
 type Tab = "armar" | "cotizacion" | "catalogo" | "historial";
 
@@ -39,6 +44,7 @@ export default function Costeador({
   const [historial, setHistorial] = useState<CanastaGuardada[] | null>(null);
   const [toast, setToast] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [editorCollage, setEditorCollage] = useState(false);
 
   const [q, setQ] = useState("");
   const [qcat, setQcat] = useState("todas");
@@ -177,6 +183,16 @@ export default function Costeador({
       avisar("Logo cargado");
     } catch {
       avisar("No se pudo cargar el logo");
+    }
+  }
+
+  async function subirCajaFondoEmisor(file: File) {
+    try {
+      const path = await subirCajaFondo(file);
+      await guardarCambiosEmisor({ cajaFondoPath: path });
+      avisar("Foto de la caja guardada");
+    } catch {
+      avisar("No se pudo subir la foto de la caja");
     }
   }
 
@@ -416,8 +432,9 @@ export default function Costeador({
 
         {tab === "cotizacion" && (
           <TabCotizacion st={st} setSt={setSt} emisor={emisor} c={c}
-            onSubirFoto={subirFotoCanasta} onSubirLogo={subirLogoEmisor}
-            onCambiarEmisor={guardarCambiosEmisor} onDescargarPDF={descargarPDF} />
+            onSubirFoto={subirFotoCanasta} onSubirLogo={subirLogoEmisor} onSubirCajaFondo={subirCajaFondoEmisor}
+            onCambiarEmisor={guardarCambiosEmisor} onDescargarPDF={descargarPDF}
+            onAbrirEditorCollage={() => setEditorCollage(true)} />
         )}
 
         {tab === "catalogo" && (
@@ -430,6 +447,20 @@ export default function Costeador({
       </div>
 
       <div className={"toast" + (toast ? " ver" : "")}>{toast}</div>
+
+      {editorCollage && (
+        <EditorCollage
+          items={st.items}
+          productos={productos}
+          cajaFondoPath={emisor.cajaFondoPath}
+          onCerrar={() => setEditorCollage(false)}
+          onGuardar={(dataUrl) => {
+            setSt((s) => ({ ...s, fotoUrl: dataUrl }));
+            setEditorCollage(false);
+            avisar("Foto de la canasta lista");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -466,7 +497,7 @@ function FilaCascada({ et, vl, tag, fuerte }: { et: string; vl: string; tag?: st
 }
 
 function TabCotizacion({
-  st, setSt, emisor, c, onSubirFoto, onSubirLogo, onCambiarEmisor, onDescargarPDF,
+  st, setSt, emisor, c, onSubirFoto, onSubirLogo, onSubirCajaFondo, onCambiarEmisor, onDescargarPDF, onAbrirEditorCollage,
 }: {
   st: EstadoCanasta;
   setSt: React.Dispatch<React.SetStateAction<EstadoCanasta>>;
@@ -474,9 +505,32 @@ function TabCotizacion({
   c: ReturnType<typeof calcular>;
   onSubirFoto: (f: File) => void;
   onSubirLogo: (f: File) => void;
+  onSubirCajaFondo: (f: File) => void;
   onCambiarEmisor: (cambios: Partial<Emisor>) => void;
   onDescargarPDF: () => void;
+  onAbrirEditorCollage: () => void;
 }) {
+  const [cajaFondoUrl, setCajaFondoUrl] = useState("");
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!emisor.cajaFondoPath) {
+        if (!cancelado) setCajaFondoUrl("");
+        return;
+      }
+      try {
+        const mapa = await urlsFirmadas([emisor.cajaFondoPath]);
+        if (!cancelado) setCajaFondoUrl(mapa[emisor.cajaFondoPath] || "");
+      } catch {
+        if (!cancelado) setCajaFondoUrl("");
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [emisor.cajaFondoPath]);
+
   return (
     <div className="grid">
       <div>
@@ -500,7 +554,13 @@ function TabCotizacion({
         <div className="card">
           <div className="card-h"><h2>Foto de la canasta</h2><span className="hint">Se guarda con la canasta</span></div>
           <div className="card-b">
-            <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) onSubirFoto(f); }} />
+            <button className="btn primario chico" onClick={onAbrirEditorCollage} disabled={!st.items.length}>
+              Canasta lista (armar foto automática)
+            </button>
+            <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--texto-suave)" }}>
+              Arma un collage con las fotos de los productos de esta canasta. O, si prefieres, sube tu propia foto:
+            </p>
+            <input type="file" accept="image/*" style={{ marginTop: 8 }} onChange={(e) => { const f = e.target.files?.[0]; if (f) onSubirFoto(f); }} />
             <div style={{ marginTop: 12 }}>
               {st.fotoUrl ? (
                 <div className="miniatura"><img src={st.fotoUrl} alt="Foto de la canasta" /><button className="btn chico" onClick={() => setSt((s) => ({ ...s, fotoUrl: "" }))}>Quitar foto</button></div>
@@ -528,6 +588,18 @@ function TabCotizacion({
               {emisor.logoUrl ? (
                 <div className="miniatura"><img src={emisor.logoUrl} alt="Logo" /><button className="btn chico" onClick={() => onCambiarEmisor({ logoUrl: "" })}>Quitar logo</button></div>
               ) : <p style={{ margin: 0, fontSize: 12.5, color: "var(--texto-suave)" }}>Sin logo. Se imprime la razón comercial en su lugar.</p>}
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-h"><h2>Fondo del collage (caja)</h2><span className="hint">La misma para todas las canastas</span></div>
+          <div className="card-b">
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) onSubirCajaFondo(f); }} />
+            <div style={{ marginTop: 12 }}>
+              {cajaFondoUrl ? (
+                <div className="miniatura"><img src={cajaFondoUrl} alt="Fondo de la caja" /></div>
+              ) : <p style={{ margin: 0, fontSize: 12.5, color: "var(--texto-suave)" }}>Sin foto de caja. El collage se arma solo con los productos.</p>}
             </div>
           </div>
         </div>
@@ -570,6 +642,36 @@ function TabCatalogo({
   const [caja, setCaja] = useState(1);
   const [pcaja, setPcaja] = useState(0);
   const [punit, setPunit] = useState(0);
+  const [fotoUrls, setFotoUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const paths = productos.map((p) => p.foto_url).filter(Boolean);
+    if (!paths.length) return;
+    urlsFirmadas(paths)
+      .then((mapa) => setFotoUrls((s) => ({ ...s, ...mapa })))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productos.map((p) => p.foto_url).join(",")]);
+
+  async function subirFoto(p: Producto, file: File) {
+    try {
+      const path = await subirFotoProducto(p, file);
+      setProductos((ps) => ps.map((x) => (x.id === p.id ? { ...x, foto_url: path } : x)));
+      avisar("Foto guardada");
+    } catch {
+      avisar("No se pudo subir la foto");
+    }
+  }
+
+  async function quitarFoto(p: Producto) {
+    try {
+      await eliminarFotoProducto(p);
+      setProductos((ps) => ps.map((x) => (x.id === p.id ? { ...x, foto_url: "" } : x)));
+      avisar("Foto quitada");
+    } catch {
+      avisar("No se pudo quitar la foto");
+    }
+  }
 
   async function agregar() {
     if (!nom.trim()) return avisar("Escribe el nombre del producto");
@@ -585,7 +687,7 @@ function TabCatalogo({
     let punitVal = punit || 0;
     if (!punitVal && pcaja) punitVal = +(pcaja / cajaVal).toFixed(2);
     try {
-      const creado = await crearProducto({ cod: p + "-" + String(n).padStart(2, "0"), nombre: nom.trim(), proveedor: prov.trim() || "Sin proveedor", categoria: cat, caja: cajaVal, precio_caja: pcaja, precio_unitario: punitVal });
+      const creado = await crearProducto({ cod: p + "-" + String(n).padStart(2, "0"), nombre: nom.trim(), proveedor: prov.trim() || "Sin proveedor", categoria: cat, caja: cajaVal, precio_caja: pcaja, precio_unitario: punitVal, foto_url: "" });
       setProductos((ps) => [...ps, creado].sort((a, b) => a.cod.localeCompare(b.cod)));
       setNom(""); setProv(""); setCaja(1); setPcaja(0); setPunit(0);
       avisar("Producto agregado al catálogo");
@@ -647,22 +749,50 @@ function TabCatalogo({
         <table>
           <thead>
             <tr>
+              <th style={{ width: 44 }}>Foto</th>
               <th style={{ width: 66 }}>Código</th><th>Producto</th><th>Proveedor</th>
               <th className="num" style={{ width: 76 }}>x Caja</th>
               <th className="num" style={{ width: 118 }}>Precio caja</th>
-              <th className="num" style={{ width: 118 }}>P. unitario</th><th style={{ width: 34 }}></th>
+              <th className="num" style={{ width: 118 }}>P. unitario</th>
+              <th style={{ width: 78 }}></th>
+              <th style={{ width: 34 }}></th>
             </tr>
           </thead>
           <tbody>
             {productos.map((p) => (
               <tr key={p.id}>
+                <td>
+                  {p.foto_url && fotoUrls[p.foto_url] ? (
+                    <img src={fotoUrls[p.foto_url]} alt="" style={{ width: 34, height: 34, objectFit: "contain", borderRadius: 6, border: "1px solid var(--linea)", background: "#fff" }} />
+                  ) : (
+                    <div style={{ width: 34, height: 34, borderRadius: 6, border: "1px dashed var(--linea)" }} />
+                  )}
+                </td>
                 <td style={{ color: "var(--azul)", fontWeight: 650, fontSize: 11.5 }}>{p.cod}</td>
                 <td>{p.nombre}<small style={{ display: "block", color: "var(--texto-suave)", fontSize: 11.5 }}>{p.categoria}</small></td>
                 <td style={{ color: "var(--texto-suave)" }}>{p.proveedor}</td>
                 <td className="num">{p.caja}</td>
                 <td className="num"><input className="num" type="number" min={0} step={0.01} defaultValue={p.precio_caja.toFixed(2)} onBlur={(e) => editar(p, "precio_caja", Number(e.target.value) || 0)} /></td>
                 <td className="num"><input className="num" type="number" min={0} step={0.01} defaultValue={p.precio_unitario.toFixed(2)} onBlur={(e) => editar(p, "precio_unitario", Number(e.target.value) || 0)} /></td>
-                <td><button className="quitar" onClick={() => eliminar(p)} title="Eliminar">×</button></td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <label className="btn chico" style={{ cursor: "pointer" }}>
+                    {p.foto_url ? "Editar" : "Agregar"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) subirFoto(p, f);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {p.foto_url && (
+                    <button className="quitar" title="Quitar foto" onClick={() => quitarFoto(p)}>×</button>
+                  )}
+                </td>
+                <td><button className="quitar" onClick={() => eliminar(p)} title="Eliminar producto">×</button></td>
               </tr>
             ))}
           </tbody>
