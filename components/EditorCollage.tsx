@@ -250,24 +250,24 @@ export default function EditorCollage({
   function generarAcomodo() {
     const productosSolo = piezas.filter((p) => !p.esFondo);
     const fondo = piezas.find((p) => p.esFondo);
-    const orden = [...productosSolo];
-    for (let i = orden.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [orden[i], orden[j]] = [orden[j], orden[i]];
-    }
+    const n = productosSolo.length;
 
     const resultado: (PiezaFuente & { xPct: number; yPct: number; rot: number; sizePct: number; zIndex: number })[] = [];
     if (fondo) {
-      resultado.push({ ...fondo, zIndex: 0, xPct: rnd(46, 54), yPct: rnd(46, 54), rot: rnd(-3, 3), sizePct: rnd(76, 86) });
+      resultado.push({ ...fondo, zIndex: 0, xPct: 50, yPct: 40, rot: 0, sizePct: 58 });
     }
-    orden.forEach((p, i) => {
+
+    // Los productos van en fila abajo, en orden, uno a continuación del otro.
+    const sizePct = Math.max(9, Math.min(20, 84 / Math.max(n, 1)));
+    productosSolo.forEach((p, i) => {
+      const xPct = n === 1 ? 50 : 8 + i * (84 / (n - 1));
       resultado.push({
         ...p,
         zIndex: i + 1,
-        xPct: rnd(8, 92),
-        yPct: rnd(12, 88),
-        rot: rnd(-16, 16),
-        sizePct: rnd(15, 24),
+        xPct,
+        yPct: 86,
+        rot: rnd(-4, 4),
+        sizePct,
       });
     });
     return resultado;
