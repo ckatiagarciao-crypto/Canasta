@@ -571,7 +571,12 @@ function TabCatalogo({
     if (!nom.trim()) return avisar("Escribe el nombre del producto");
     const pref: Record<string, string> = { "Panetones": "PAN", "Vinos y espumantes": "VIN", "Licores": "LIC", "Chocolates y dulces": "CHO", "Galletas y snacks": "GAL", "Abarrotes": "ABA", "Conservas": "CON", "Lácteos": "LAC", "Gourmet": "GOU", "Empaque y bases": "EMP" };
     const p = pref[cat] || "GEN";
-    const n = productos.filter((x) => x.cod.startsWith(p)).length + 1;
+    const maxN = productos.reduce((max, x) => {
+      if (!x.cod.startsWith(p + "-")) return max;
+      const num = parseInt(x.cod.slice(p.length + 1), 10);
+      return Number.isFinite(num) ? Math.max(max, num) : max;
+    }, 0);
+    const n = maxN + 1;
     const cajaVal = Math.max(1, caja || 1);
     let punitVal = punit || 0;
     if (!punitVal && pcaja) punitVal = +(pcaja / cajaVal).toFixed(2);
@@ -592,7 +597,8 @@ function TabCatalogo({
     try {
       await actualizarProducto(p.id, cambios);
     } catch {
-      avisar("No se pudo guardar el cambio de precio");
+      setProductos((ps) => ps.map((x) => (x.id === p.id ? p : x)));
+      avisar("No se pudo guardar el cambio de precio, se deshizo la edición");
     }
   }
 

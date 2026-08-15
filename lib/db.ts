@@ -30,9 +30,21 @@ export async function eliminarProducto(id: string): Promise<void> {
 
 export async function restaurarCatalogoBase(): Promise<Producto[]> {
   const supabase = createClient();
-  const { error: errDel } = await supabase.from("productos").delete().neq("cod", "__ninguno__");
-  if (errDel) throw errDel;
-  const { data, error } = await supabase.from("productos").insert(CATALOGO_BASE).select();
+  // Se actualiza/inserta primero (upsert) y recién después se borran los productos
+  // agregados a mano, para que el catálogo nunca quede vacío si algo falla a mitad de camino.
+  const { error: errUpsert } = await supabase.from("productos").upsert(CATALOGO_BASE, { onConflict: "cod" });
+  if (errUpsert) throw errUpsert;
+
+  const { data: actuales, error: errSel } = await supabase.from("productos").select("id, cod");
+  if (errSel) throw errSel;
+  const codsBase = new Set(CATALOGO_BASE.map((p) => p.cod));
+  const idsExtra = (actuales ?? []).filter((p) => !codsBase.has(p.cod)).map((p) => p.id);
+  if (idsExtra.length) {
+    const { error: errDel } = await supabase.from("productos").delete().in("id", idsExtra);
+    if (errDel) throw errDel;
+  }
+
+  const { data, error } = await supabase.from("productos").select("*").order("cod");
   if (error) throw error;
   return data as Producto[];
 }
@@ -129,11 +141,20 @@ export async function guardarCanasta(st: EstadoCanasta): Promise<string> {
   };
 
   let canastaId = st.id;
+  let idsItemsViejos: string[] = [];
+  let idsOtrosViejos: string[] = [];
+
   if (canastaId) {
     const { error } = await supabase.from("canastas").update(fila).eq("id", canastaId);
     if (error) throw error;
-    await supabase.from("canasta_items").delete().eq("canasta_id", canastaId);
-    await supabase.from("canasta_otros").delete().eq("canasta_id", canastaId);
+    // Se guarda qué filas había antes, pero no se borran todavía: si el insert de
+    // abajo falla, la canasta se queda con su contenido anterior en vez de vacía.
+    const [{ data: itemsViejos }, { data: otrosViejos }] = await Promise.all([
+      supabase.from("canasta_items").select("id").eq("canasta_id", canastaId),
+      supabase.from("canasta_otros").select("id").eq("canasta_id", canastaId),
+    ]);
+    idsItemsViejos = (itemsViejos ?? []).map((x) => x.id as string);
+    idsOtrosViejos = (otrosViejos ?? []).map((x) => x.id as string);
   } else {
     const { data, error } = await supabase.from("canastas").insert(fila).select("id").single();
     if (error) throw error;
@@ -159,6 +180,9 @@ export async function guardarCanasta(st: EstadoCanasta): Promise<string> {
     );
     if (error) throw error;
   }
+
+  if (idsItemsViejos.length) await supabase.from("canasta_items").delete().in("id", idsItemsViejos);
+  if (idsOtrosViejos.length) await supabase.from("canasta_otros").delete().in("id", idsOtrosViejos);
 
   return canastaId;
 }
