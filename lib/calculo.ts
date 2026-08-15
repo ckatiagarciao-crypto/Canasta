@@ -2,7 +2,8 @@ import type { EstadoCanasta } from "./tipos";
 
 export const IGV = 0.18;
 export const ADMIN = 0.05;
-export const RENTA = 0.1;
+// Régimen Especial de Renta (RER): 1.5% sobre la venta, no sobre la utilidad.
+export const RENTA = 0.015;
 
 export function unidadesArmado(items: EstadoCanasta["items"]): number {
   return items.reduce((a, i) => a + (Number(i.cantidad) || 0), 0);
@@ -58,10 +59,14 @@ export function calcular(st: EstadoCanasta): ResultadoCalculo {
   const precioCliente = venta + igv;
   const d = Math.min(Math.max(Number(st.descuento) || 0, 0), 100) / 100;
   const montoDcto = precioCliente * d;
-  const precioFinal = precioCliente - montoDcto;
+  const precioFinalCrudo = precioCliente - montoDcto;
+  // El precio que se cobra se redondea al décimo de sol superior (83.25 -> 83.30),
+  // y de ahí para abajo todo se recalcula sobre ese precio ya redondeado, para que
+  // el desglose siempre sume exactamente el precio final mostrado.
+  const precioFinal = Math.ceil(precioFinalCrudo * 10) / 10;
   const ventaFinal = st.factura ? precioFinal / (1 + IGV) : precioFinal;
   const utilidad = ventaFinal - costo;
-  const ir = Math.max(utilidad, 0) * RENTA;
+  const ir = Math.max(ventaFinal, 0) * RENTA;
   const utilidadNeta = utilidad - ir;
   const margenEfectivo = ventaFinal > 0 ? (utilidad / ventaFinal) * 100 : 0;
   const margenNeto = ventaFinal > 0 ? (utilidadNeta / ventaFinal) * 100 : 0;

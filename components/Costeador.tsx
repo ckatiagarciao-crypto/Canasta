@@ -305,7 +305,7 @@ export default function Costeador({
                               <td style={{ color: "var(--azul)", fontWeight: 650, fontSize: 11.5 }}>{i.cod}</td>
                               <td>{i.nombre}<small style={{ display: "block", color: "var(--texto-suave)", fontSize: 11.5 }}>{i.proveedor}</small></td>
                               <td className="num"><input className="w-cant num" type="number" min={0} step={1} value={i.cantidad} onChange={(e) => actualizarItem(ix, { cantidad: Math.max(0, Number(e.target.value) || 0) })} /></td>
-                              <td className="num"><input className="w-pre num" type="number" min={0} step={0.01} value={i.precio_unitario} onChange={(e) => actualizarItem(ix, { precio_unitario: Math.max(0, Number(e.target.value) || 0) })} /></td>
+                              <td className="num" title="Para cambiar el precio, edítalo en la pestaña Catálogo">{S(i.precio_unitario)}</td>
                               <td className="num" style={{ fontWeight: 600 }}>{S(i.precio_unitario * i.cantidad)}</td>
                               <td><button className="quitar" onClick={() => quitarItem(ix)} title="Quitar">×</button></td>
                             </tr>
@@ -386,15 +386,19 @@ export default function Costeador({
                     <FilaCascada et="Armado" vl={S(c.armado)} tag={unidadesArmado(st.items) + " ítems"} />
                     <FilaCascada et="Gastos administrativos 5%" vl={S(c.admin)} />
                     {c.otros > 0 && <FilaCascada et={"Otros costos" + (st.factura ? " sin IGV" : "")} vl={S(c.otrosBase)} />}
-                    <FilaCascada et="Costo total por canasta" vl={S(c.costo)} />
+                    <FilaCascada et="Costo total por canasta" vl={S(c.costo)} fuerte />
                     <FilaCascada et="Utilidad antes de impuesto" vl={S(c.utilidad)} tag={pct(c.margenEfectivo) + " sobre venta"} />
-                    <FilaCascada et="Impuesto a la renta 10%" vl={"- " + S(c.ir)} />
+                    <FilaCascada et="Impuesto a la renta (RER) 1.5%" vl={"- " + S(c.ir)} />
                     <FilaCascada et="Utilidad neta" vl={S(c.utilidadNeta)} tag={pct(c.margenNeto) + " sobre venta"} />
-                    <FilaCascada et="Precio de venta sin IGV" vl={S(c.ventaFinal)} />
+                    <FilaCascada et="Precio de venta sin IGV" vl={S(c.ventaFinal)} fuerte />
                     {st.factura && <FilaCascada et="IGV 18%" vl={S(c.precioFinal - c.ventaFinal)} />}
                     <FilaCascada et="Precio al cliente" vl={S(c.precioCliente)} tag="antes de descuento" />
                     {c.montoDcto > 0 && <FilaCascada et={"Descuento " + pct(st.descuento)} vl={"- " + S(c.montoDcto)} />}
-                    <li className="final"><span className="et">Precio final por canasta</span><span className="vl">{S(c.precioFinal)}</span></li>
+                    <li className="final">
+                      <span className="et">Precio final por canasta</span>
+                      <span className="tag">margen neto {pct(c.margenNeto)}</span>
+                      <span className="vl">{S(c.precioFinal)}</span>
+                    </li>
                   </ul>
                 </div>
                 <div className="total-pie"><span>Total por {c.unidades} {c.unidades === 1 ? "canasta" : "canastas"}</span><b>{S(c.totalFinal)}</b></div>
@@ -455,9 +459,9 @@ function BarraPrecio({ c }: { c: ReturnType<typeof calcular> }) {
   );
 }
 
-function FilaCascada({ et, vl, tag }: { et: string; vl: string; tag?: string }) {
+function FilaCascada({ et, vl, tag, fuerte }: { et: string; vl: string; tag?: string; fuerte?: boolean }) {
   return (
-    <li><span className="et">{et}</span>{tag && <span className="tag">{tag}</span>}<span className="vl">{vl}</span></li>
+    <li className={fuerte ? "fuerte" : undefined}><span className="et">{et}</span>{tag && <span className="tag">{tag}</span>}<span className="vl">{vl}</span></li>
   );
 }
 

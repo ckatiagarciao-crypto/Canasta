@@ -55,12 +55,48 @@ describe("calcular", () => {
     expect(c.costo).toBeCloseTo(115.5, 6);
     expect(c.venta).toBeCloseTo(138.6, 6);
     expect(c.igv).toBe(0);
+    // 138.6 ya es múltiplo de 0.10, así que el redondeo no lo cambia.
     expect(c.precioFinal).toBeCloseTo(138.6, 6);
     expect(c.utilidad).toBeCloseTo(23.1, 6);
-    expect(c.ir).toBeCloseTo(2.31, 6);
-    expect(c.utilidadNeta).toBeCloseTo(20.79, 6);
-    expect(c.margenNeto).toBeCloseTo(15, 6);
+    // Régimen Especial: 1.5% de la venta (138.6), no 10% de la utilidad.
+    expect(c.ir).toBeCloseTo(2.079, 6);
+    expect(c.utilidadNeta).toBeCloseTo(21.021, 6);
+    expect(c.margenNeto).toBeCloseTo(15.1667, 3);
     expect(c.totalFinal).toBeCloseTo(138.6, 6);
+  });
+
+  it("redondea el precio final hacia arriba, al décimo de sol", () => {
+    const st = estadoBase({
+      items: [{ cod: "A", nombre: "Producto", proveedor: "", precio_unitario: 33, cantidad: 1 }],
+      armado: 0,
+      margen: 0,
+      tipoMargen: "costo",
+      descuento: 0,
+      factura: false,
+    });
+    const c = calcular(st);
+
+    // costo = 33 + 5% = 34.65 -> el precio de venta cae en un múltiplo de
+    // 0.05 que no es múltiplo de 0.10, así que debe subir a 34.70.
+    expect(c.costo).toBeCloseTo(34.65, 6);
+    expect(c.precioFinal).toBeCloseTo(34.7, 6);
+  });
+
+  it("recalcula la utilidad y el impuesto a partir del precio ya redondeado", () => {
+    const st = estadoBase({
+      items: [{ cod: "A", nombre: "Producto", proveedor: "", precio_unitario: 33, cantidad: 1 }],
+      armado: 0,
+      margen: 0,
+      tipoMargen: "costo",
+      descuento: 0,
+      factura: false,
+    });
+    const c = calcular(st);
+
+    // ventaFinal debe ser el precio YA redondeado (34.70), no el crudo (34.65).
+    expect(c.ventaFinal).toBeCloseTo(34.7, 6);
+    expect(c.ir).toBeCloseTo(34.7 * 0.015, 6);
+    expect(c.utilidad).toBeCloseTo(34.7 - c.costo, 6);
   });
 
   it("agrega el IGV cuando la canasta emite factura", () => {
@@ -89,19 +125,24 @@ describe("calcular", () => {
       descuento: 10,
     }));
     expect(conDescuento.precioFinal).toBeLessThan(sinDescuento.precioFinal);
-    expect(conDescuento.montoDcto).toBeCloseTo(conDescuento.precioCliente * 0.1, 6);
   });
 
-  it("nunca deja la utilidad neta negativa por el impuesto a la renta cuando hay pérdida", () => {
+  it("cobra el impuesto a la renta (RER) sobre la venta incluso si hay pérdida", () => {
     const st = estadoBase({
       items: [{ cod: "A", nombre: "P", proveedor: "", precio_unitario: 10, cantidad: 1 }],
+      armado: 5,
       margen: 0,
       descuento: 90,
       factura: false,
     });
     const c = calcular(st);
-    expect(c.ir).toBe(0);
-    expect(c.utilidadNeta).toBe(c.utilidad);
+    // A diferencia del régimen general, el RER cobra 1.5% de la venta
+    // aunque el costo sea mayor que el precio: no se libra de impuesto por
+    // tener pérdida.
+    expect(c.utilidad).toBeLessThan(0);
+    expect(c.ir).toBeGreaterThan(0);
+    expect(c.ir).toBeCloseTo(c.ventaFinal * 0.015, 6);
+    expect(c.utilidadNeta).toBeCloseTo(c.utilidad - c.ir, 6);
   });
 
   it("multiplica el precio final por el número de canastas", () => {

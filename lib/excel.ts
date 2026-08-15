@@ -153,7 +153,7 @@ export async function generarExcel(st: EstadoCanasta) {
     ["Otros costos", c.otrosBase, c.otrosBase * c.unidades, st.otros.length ? sinIgvTxt : "Sin conceptos cargados"],
     ["Costo total por canasta", c.costo, c.totalCosto, "Base para calcular el margen"],
     ["Utilidad antes de impuesto", c.utilidad, c.totalUtilidad, "Margen " + pct(st.margen) + " sobre " + (st.tipoMargen === "venta" ? "venta" : "costo")],
-    ["Impuesto a la renta 10%", -c.ir, -c.totalIr, "10% de la utilidad"],
+    ["Impuesto a la renta (RER) 1.5%", -c.ir, -c.totalIr, "1.5% de la venta"],
     ["Utilidad neta", c.utilidadNeta, c.totalNeta, pct(c.margenNeto) + " sobre el precio de venta"],
     ["Precio de venta sin IGV", c.ventaFinal, c.ventaFinal * c.unidades, "Después del descuento"],
     ["IGV 18%", c.precioFinal - c.ventaFinal, (c.precioFinal - c.ventaFinal) * c.unidades, st.factura ? "Se traslada al cliente" : "No se discrimina"],
