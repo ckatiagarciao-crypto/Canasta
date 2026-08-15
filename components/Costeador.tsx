@@ -26,6 +26,7 @@ import {
 import { CATEGORIAS, nuevoEstado, nuevoEmisor } from "@/lib/tipos";
 import type { CanastaGuardada, Emisor, EstadoCanasta, ItemCanasta, Producto } from "@/lib/tipos";
 import EditorCollage from "@/components/EditorCollage";
+import MaestroImagenes from "@/components/MaestroImagenes";
 
 type Tab = "armar" | "cotizacion" | "catalogo" | "historial";
 
@@ -639,6 +640,7 @@ function TabCatalogo({
   const [nom, setNom] = useState("");
   const [prov, setProv] = useState("");
   const [cat, setCat] = useState(CATEGORIAS[0]);
+  const [mostrarMaestro, setMostrarMaestro] = useState(false);
   const [caja, setCaja] = useState(1);
   const [pcaja, setPcaja] = useState(0);
   const [punit, setPunit] = useState(0);
@@ -743,7 +745,8 @@ function TabCatalogo({
           <div><label>Precio unitario con IGV</label><input className="num" type="number" min={0} step={0.01} value={punit || ""} onChange={(e) => setPunit(Number(e.target.value) || 0)} placeholder="0.00" /></div>
         </div>
         <button className="btn primario chico" onClick={agregar}>Agregar al catálogo</button>{" "}
-        <button className="btn chico" onClick={restaurar}>Restaurar catálogo original</button>
+        <button className="btn chico" onClick={restaurar}>Restaurar catálogo original</button>{" "}
+        <button className="btn chico" onClick={() => setMostrarMaestro(true)}>Maestro de imágenes</button>
       </div>
       <div className="card-b" style={{ paddingTop: 0, maxHeight: 480, overflow: "auto" }}>
         <table>
@@ -798,6 +801,17 @@ function TabCatalogo({
           </tbody>
         </table>
       </div>
+
+      {mostrarMaestro && (
+        <MaestroImagenes
+          productos={productos}
+          avisar={avisar}
+          onCerrar={() => setMostrarMaestro(false)}
+          onFotoSubida={(productoId, path) =>
+            setProductos((ps) => ps.map((x) => (x.id === productoId ? { ...x, foto_url: path } : x)))
+          }
+        />
+      )}
     </div>
   );
 }
