@@ -97,24 +97,33 @@ export async function generarPDF(st: EstadoCanasta, emisor: Emisor) {
   y += 22;
 
   const hayFoto = !!st.fotoUrl;
-  const xLista = hayFoto ? 104 : L + 8;
+  const yTope = 234;
+  const altoDisponibleFoto = yTope - y;
+
+  let anchoFoto = 0;
+  let altoFoto = 0;
+  let dimFoto: { w: number; h: number } | null = null;
+  if (hayFoto) {
+    dimFoto = await medirImagen(st.fotoUrl);
+    if (dimFoto) {
+      // La foto ocupa la mayor parte del ancho de la hoja; la lista de
+      // productos queda angosta a la derecha.
+      const anchoMax = 128;
+      const escala = Math.min(anchoMax / dimFoto.w, altoDisponibleFoto / dimFoto.h);
+      anchoFoto = dimFoto.w * escala;
+      altoFoto = dimFoto.h * escala;
+      doc.addImage(st.fotoUrl, "JPEG", L + 2, y, anchoFoto, altoFoto);
+    }
+  }
+
+  const xLista = hayFoto && dimFoto ? L + 2 + anchoFoto + 8 : L + 8;
   const anchoLista = R - xLista - 2;
   let yLista = y;
   let fs = st.items.length > 20 ? 8 : st.items.length > 14 ? 8.8 : 9.6;
   let lh = fs * 0.62;
-  const yTope = 234;
   if (y + st.items.length * lh > yTope) {
     lh = Math.max(3.4, (yTope - y) / st.items.length);
     fs = Math.max(6.4, Math.min(fs, lh / 0.62));
-  }
-
-  if (hayFoto) {
-    const dim = await medirImagen(st.fotoUrl);
-    if (dim) {
-      const w = 80,
-        h = Math.min(86, (w * dim.h) / dim.w);
-      doc.addImage(st.fotoUrl, "JPEG", L + 2, y, w, h);
-    }
   }
 
   st.items.forEach((i) => {
@@ -133,7 +142,7 @@ export async function generarPDF(st: EstadoCanasta, emisor: Emisor) {
     }
   });
 
-  let yCond = hayFoto ? Math.max(y + 92, 200) : yLista + 12;
+  let yCond = hayFoto ? Math.max(y + altoFoto + 10, yLista + 12) : yLista + 12;
   if (yCond > 236) yCond = 236;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
