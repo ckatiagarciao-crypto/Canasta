@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { CATALOGO_BASE } from "@/lib/catalogoBase";
+import { recortarMargenes } from "@/lib/imagen";
 import type { CanastaGuardada, Emisor, EstadoCanasta, Producto } from "@/lib/tipos";
 
 const BUCKET_FOTOS = "fotos-productos";
@@ -39,8 +40,9 @@ export async function eliminarProducto(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function subirFotoProducto(producto: Producto, file: File): Promise<string> {
+export async function subirFotoProducto(producto: Producto, archivoOriginal: File): Promise<string> {
   const supabase = createClient();
+  const file = await recortarMargenes(archivoOriginal);
   const path = `${producto.cod}.${extensionDe(file)}`;
   const { error: errSubida } = await supabase.storage.from(BUCKET_FOTOS).upload(path, file, { upsert: true });
   if (errSubida) throw errSubida;
@@ -58,8 +60,9 @@ export async function eliminarFotoProducto(producto: Producto): Promise<void> {
   if (error) throw error;
 }
 
-export async function subirCajaFondo(file: File): Promise<string> {
+export async function subirCajaFondo(archivoOriginal: File): Promise<string> {
   const supabase = createClient();
+  const file = await recortarMargenes(archivoOriginal);
   const path = `${PATH_CAJA_FONDO_PREFIJO}.${extensionDe(file)}`;
   const { error } = await supabase.storage.from(BUCKET_FOTOS).upload(path, file, { upsert: true });
   if (error) throw error;

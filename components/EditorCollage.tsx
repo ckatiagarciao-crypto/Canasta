@@ -86,7 +86,7 @@ export default function EditorCollage({
   }
 
   function deseleccionarTodas() {
-    lienzoRef.current?.querySelectorAll(".pieza.seleccionada").forEach((p) => p.classList.remove("seleccionada"));
+    lienzoRef.current?.querySelectorAll(".pieza-ec.seleccionada").forEach((p) => p.classList.remove("seleccionada"));
   }
 
   function pintar(acomodo: (PiezaFuente & { xPct: number; yPct: number; rot: number; sizePct: number; zIndex: number })[]) {
@@ -254,7 +254,7 @@ export default function EditorCollage({
 
     const resultado: (PiezaFuente & { xPct: number; yPct: number; rot: number; sizePct: number; zIndex: number })[] = [];
     if (fondo) {
-      resultado.push({ ...fondo, zIndex: 0, xPct: 50, yPct: 40, rot: 0, sizePct: 58 });
+      resultado.push({ ...fondo, zIndex: 0, xPct: 50, yPct: 40, rot: 0, sizePct: 46 });
     }
 
     // Los productos van en fila abajo, en orden, uno a continuación del otro.
