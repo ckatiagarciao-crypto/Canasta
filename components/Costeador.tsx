@@ -156,11 +156,25 @@ export default function Costeador({
     }
   }
 
+  async function guardarFotoSiYaExiste(stConFoto: EstadoCanasta) {
+    if (!stConFoto.id) {
+      avisar("Foto lista. Dale a Guardar canasta para que quede guardada.");
+      return;
+    }
+    try {
+      await guardarCanasta(stConFoto);
+      avisar("Foto guardada en la canasta");
+    } catch {
+      avisar("La foto se ve en pantalla, pero no se pudo guardar en la canasta. Dale a Guardar canasta.");
+    }
+  }
+
   async function subirFotoCanasta(file: File) {
     try {
       const url = await comprimir(file, 900, "image/jpeg");
-      setSt((s) => ({ ...s, fotoUrl: url }));
-      avisar("Foto cargada");
+      const nuevo = { ...st, fotoUrl: url };
+      setSt(nuevo);
+      await guardarFotoSiYaExiste(nuevo);
     } catch {
       avisar("No se pudo cargar la imagen");
     }
@@ -435,7 +449,8 @@ export default function Costeador({
           <TabCotizacion st={st} setSt={setSt} emisor={emisor} c={c}
             onSubirFoto={subirFotoCanasta} onSubirLogo={subirLogoEmisor} onSubirCajaFondo={subirCajaFondoEmisor}
             onCambiarEmisor={guardarCambiosEmisor} onDescargarPDF={descargarPDF}
-            onAbrirEditorCollage={() => setEditorCollage(true)} />
+            onAbrirEditorCollage={() => setEditorCollage(true)}
+            onQuitarFoto={() => { const nuevo = { ...st, fotoUrl: "" }; setSt(nuevo); guardarFotoSiYaExiste(nuevo); }} />
         )}
 
         {tab === "catalogo" && (
@@ -456,9 +471,10 @@ export default function Costeador({
           cajaFondoPath={emisor.cajaFondoPath}
           onCerrar={() => setEditorCollage(false)}
           onGuardar={(dataUrl) => {
-            setSt((s) => ({ ...s, fotoUrl: dataUrl }));
+            const nuevo = { ...st, fotoUrl: dataUrl };
+            setSt(nuevo);
             setEditorCollage(false);
-            avisar("Foto de la canasta lista");
+            guardarFotoSiYaExiste(nuevo);
           }}
         />
       )}
@@ -498,7 +514,7 @@ function FilaCascada({ et, vl, tag, fuerte }: { et: string; vl: string; tag?: st
 }
 
 function TabCotizacion({
-  st, setSt, emisor, c, onSubirFoto, onSubirLogo, onSubirCajaFondo, onCambiarEmisor, onDescargarPDF, onAbrirEditorCollage,
+  st, setSt, emisor, c, onSubirFoto, onSubirLogo, onSubirCajaFondo, onCambiarEmisor, onDescargarPDF, onAbrirEditorCollage, onQuitarFoto,
 }: {
   st: EstadoCanasta;
   setSt: React.Dispatch<React.SetStateAction<EstadoCanasta>>;
@@ -510,6 +526,7 @@ function TabCotizacion({
   onCambiarEmisor: (cambios: Partial<Emisor>) => void;
   onDescargarPDF: () => void;
   onAbrirEditorCollage: () => void;
+  onQuitarFoto: () => void;
 }) {
   const [cajaFondoUrl, setCajaFondoUrl] = useState("");
 
@@ -564,7 +581,7 @@ function TabCotizacion({
             <input type="file" accept="image/*" style={{ marginTop: 8 }} onChange={(e) => { const f = e.target.files?.[0]; if (f) onSubirFoto(f); }} />
             <div style={{ marginTop: 12 }}>
               {st.fotoUrl ? (
-                <div className="miniatura"><img src={st.fotoUrl} alt="Foto de la canasta" /><button className="btn chico" onClick={() => setSt((s) => ({ ...s, fotoUrl: "" }))}>Quitar foto</button></div>
+                <div className="miniatura"><img src={st.fotoUrl} alt="Foto de la canasta" /><button className="btn chico" onClick={onQuitarFoto}>Quitar foto</button></div>
               ) : <p style={{ margin: 0, fontSize: 12.5, color: "var(--texto-suave)" }}>Sin foto. La cotización se genera igual, con el detalle en una sola columna.</p>}
             </div>
           </div>
