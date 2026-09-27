@@ -72,7 +72,7 @@ export function calcular(st: EstadoCanasta): ResultadoCalculo {
   // resta 10 céntimos (el ".90" con el que se publican los precios). Todo
   // lo demás se recalcula desde ese precio ya definitivo, para que el
   // desglose siempre sume exacto.
-  const precioFinal = Math.ceil(precioFinalCrudo) - 0.1;
+  const precioFinal = Math.max(0, Math.ceil(precioFinalCrudo) - 0.1);
   const ventaFinal = st.factura ? precioFinal / (1 + IGV) : precioFinal;
   const utilidad = ventaFinal - costo;
   const ir = Math.max(ventaFinal, 0) * RENTA;

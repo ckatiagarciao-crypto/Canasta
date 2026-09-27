@@ -159,4 +159,12 @@ describe("calcular", () => {
     const st = estadoBase({ items: [{ cod: "A", nombre: "P", proveedor: "", precio_unitario: 10, cantidad: 1 }], unidades: 0 });
     expect(calcular(st).unidades).toBe(1);
   });
+
+  it("nunca deja el precio final en negativo con un descuento del 100%", () => {
+    const st = estadoBase({
+      items: [{ cod: "A", nombre: "P", proveedor: "", precio_unitario: 50, cantidad: 1 }],
+      descuento: 100,
+    });
+    expect(calcular(st).precioFinal).toBe(0);
+  });
 });

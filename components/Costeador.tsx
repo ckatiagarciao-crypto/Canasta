@@ -165,7 +165,8 @@ export default function Costeador({
       ...s,
       nivel: codigo,
       margen: nivel ? nivel.margen : s.margen,
-      costoFijo: nivel ? nivel.costoFijo : 0,
+      tipoMargen: nivel ? "costo" : s.tipoMargen,
+      costoFijo: nivel ? nivel.costoFijo : s.costoFijo,
     }));
   }
 

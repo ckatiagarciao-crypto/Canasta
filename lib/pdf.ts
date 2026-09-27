@@ -115,7 +115,7 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
 
   // --- Resumen de la propuesta ---
   tituloSeccion("RESUMEN DE LA PROPUESTA");
-  const colsR = [L, L + 12, 118, 142, R];
+  const colsR = [L, L + 10, L + 88, L + 108, L + 138, R];
   const altoFilaR = 13;
   asegurarEspacio(9 + altoFilaR * cot.canastas.length);
   doc.setFillColor(P.fuerte[0], P.fuerte[1], P.fuerte[2]);
@@ -127,12 +127,13 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
   doc.text("DESCRIPCIÓN", colsR[1] + 3, y + 5.8);
   doc.text("CANT.", (colsR[2] + colsR[3]) / 2, y + 5.8, { align: "center" });
   doc.text("P. UNIT. CON IGV", (colsR[3] + colsR[4]) / 2, y + 5.8, { align: "center" });
+  doc.text("TOTAL CON IGV", (colsR[4] + colsR[5]) / 2, y + 5.8, { align: "center" });
   y += 9;
   doc.setDrawColor(P.pie[0], P.pie[1], P.pie[2]);
   doc.setLineWidth(0.25);
   cot.canastas.forEach((it, ix) => {
     doc.rect(L, y, ANCHO, altoFilaR);
-    colsR.slice(1, 4).forEach((x) => doc.line(x, y, x, y + altoFilaR));
+    colsR.slice(1, 5).forEach((x) => doc.line(x, y, x, y + altoFilaR));
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(35, 35, 35);
@@ -147,9 +148,9 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
     doc.setFontSize(9.5);
     doc.setTextColor(35, 35, 35);
     doc.text(String(it.cantidad), (colsR[2] + colsR[3]) / 2, y + 8, { align: "center" });
-    doc.text(S(it.precioUnitario), (colsR[3] + colsR[4]) / 2 - 8, y + 8, { align: "center" });
+    doc.text(S(it.precioUnitario), (colsR[3] + colsR[4]) / 2, y + 8, { align: "center" });
     doc.setFont("helvetica", "bold");
-    doc.text(S(it.precioUnitario * it.cantidad), (colsR[3] + colsR[4]) / 2 + 12, y + 8, { align: "center" });
+    doc.text(S(it.precioUnitario * it.cantidad), (colsR[4] + colsR[5]) / 2, y + 8, { align: "center" });
     y += altoFilaR;
   });
   y += 3;
@@ -208,7 +209,10 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
     }
     doc.line(L + anchoFoto + 4, y, L + anchoFoto + 4, y + altoCuerpo);
 
-    const listaTodos = [...it.items.map((p) => p.cantidad + "  " + p.nombre), "1  Caja navideña con tapa y precinto"];
+    const tieneCaja = it.items.some((p) => p.cod.startsWith("EMP"));
+    const listaTodos = tieneCaja
+      ? it.items.map((p) => p.cantidad + "  " + p.nombre)
+      : [...it.items.map((p) => p.cantidad + "  " + p.nombre), "1  Caja navideña con tapa y precinto"];
     const xCol1 = L + anchoFoto + 8;
     const anchoCol = (ANCHO - anchoFoto - 12) / 2;
     const xCol2 = xCol1 + anchoCol + 4;
