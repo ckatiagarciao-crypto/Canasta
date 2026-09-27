@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { calcular, armadoSugerido, unidadesArmado, S, pct } from "@/lib/calculo";
 import { comprimir } from "@/lib/imagen";
-import { generarPDF } from "@/lib/pdf";
+import { generarCotizacionPDF } from "@/lib/pdf";
 import { generarExcel } from "@/lib/excel";
 import {
   crearProducto,
@@ -16,6 +16,9 @@ import {
   listarCanastas,
   guardarCanasta,
   eliminarCanasta,
+  listarCotizaciones,
+  guardarCotizacion,
+  eliminarCotizacion,
   obtenerEmisor,
   guardarEmisor,
   subirFotoProducto,
@@ -23,10 +26,11 @@ import {
   subirCajaFondo,
   urlsFirmadas,
 } from "@/lib/db";
-import { CATEGORIAS, nuevoEstado, nuevoEmisor } from "@/lib/tipos";
-import type { CanastaGuardada, Emisor, EstadoCanasta, ItemCanasta, Producto } from "@/lib/tipos";
+import { CATEGORIAS, nuevoEstado, nuevoEmisor, nuevaCotizacion } from "@/lib/tipos";
+import type { CanastaGuardada, Cotizacion, CotizacionGuardada, Emisor, EstadoCanasta, ItemCanasta, Producto } from "@/lib/tipos";
 import { NIVELES, nivelPorCodigo } from "@/lib/niveles";
 import { PLANTILLAS, plantillaPorCodigo } from "@/lib/plantillas";
+import { FIRMANTES } from "@/lib/firmantes";
 import EditorCollage from "@/components/EditorCollage";
 import MaestroImagenes from "@/components/MaestroImagenes";
 
@@ -45,8 +49,11 @@ export default function Costeador({
   const [st, setSt] = useState<EstadoCanasta>(nuevoEstado());
   const [emisor, setEmisor] = useState<Emisor>(nuevoEmisor());
   const [historial, setHistorial] = useState<CanastaGuardada[] | null>(null);
+  const [cotizacion, setCotizacion] = useState<Cotizacion>(nuevaCotizacion());
+  const [cotizaciones, setCotizaciones] = useState<CotizacionGuardada[] | null>(null);
   const [toast, setToast] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [guardandoCot, setGuardandoCot] = useState(false);
   const [editorCollage, setEditorCollage] = useState(false);
 
   const [q, setQ] = useState("");
@@ -62,6 +69,26 @@ export default function Costeador({
       .then(setEmisor)
       .catch(() => avisar("No se pudo cargar los datos de tu empresa"));
   }, []);
+
+  const [cajaFondoUrl, setCajaFondoUrl] = useState("");
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!emisor.cajaFondoPath) {
+        if (!cancelado) setCajaFondoUrl("");
+        return;
+      }
+      try {
+        const mapa = await urlsFirmadas([emisor.cajaFondoPath]);
+        if (!cancelado) setCajaFondoUrl(mapa[emisor.cajaFondoPath] || "");
+      } catch {
+        if (!cancelado) setCajaFondoUrl("");
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [emisor.cajaFondoPath]);
 
   const armadoEfectivo = useMemo(
     () => (st.armadoManual ? st.armado : armadoSugerido(st.items)),
@@ -79,9 +106,22 @@ export default function Costeador({
     }
   }
 
+  async function cargarCotizaciones() {
+    try {
+      const c = await listarCotizaciones();
+      setCotizaciones(c);
+    } catch {
+      avisar("No se pudo cargar las cotizaciones guardadas");
+    }
+  }
+
   function cambiarTab(t: Tab) {
     setTab(t);
-    if (t === "historial" && historial === null) cargarHistorial();
+    if (t === "historial") {
+      if (historial === null) cargarHistorial();
+      if (cotizaciones === null) cargarCotizaciones();
+    }
+    if (t === "cotizacion" && historial === null) cargarHistorial();
   }
 
   function agregarProducto(p: Producto) {
@@ -199,6 +239,89 @@ export default function Costeador({
     }
   }
 
+  function agregarCanastaACotizacion(h: CanastaGuardada) {
+    if (cotizacion.canastas.some((x) => x.canastaId === h.id)) {
+      avisar("Esa canasta ya está en la cotización");
+      return;
+    }
+    const armadoEf = h.armadoManual ? h.armado : armadoSugerido(h.items);
+    const calc = calcular({ ...h, armado: armadoEf });
+    setCotizacion((s) => ({
+      ...s,
+      canastas: [
+        ...s.canastas,
+        {
+          canastaId: h.id,
+          nombre: h.nombre,
+          nivel: h.nivel,
+          cantidad: h.unidades || 1,
+          precioUnitario: calc.precioFinal,
+          items: h.items,
+          fotoUrl: h.fotoUrl,
+        },
+      ],
+    }));
+  }
+
+  function actualizarCantidadCotizacion(ix: number, cantidad: number) {
+    setCotizacion((s) => ({
+      ...s,
+      canastas: s.canastas.map((c, j) => (j === ix ? { ...c, cantidad: Math.max(1, Math.round(cantidad) || 1) } : c)),
+    }));
+  }
+
+  function quitarCanastaDeCotizacion(ix: number) {
+    setCotizacion((s) => ({ ...s, canastas: s.canastas.filter((_, j) => j !== ix) }));
+  }
+
+  function nuevaCotizacionActual() {
+    if (cotizacion.canastas.length && !confirm("Se limpiará la cotización actual. ¿Continuar?")) return;
+    setCotizacion(nuevaCotizacion());
+    avisar("Cotización nueva lista");
+  }
+
+  async function guardarCotizacionActual() {
+    if (!cotizacion.canastas.length) return avisar("Agrega al menos una canasta a la cotización");
+    if (!cotizacion.empresa.trim()) return avisar("Ponle el nombre de la empresa cliente");
+    setGuardandoCot(true);
+    try {
+      const id = await guardarCotizacion(cotizacion);
+      setCotizacion((s) => ({ ...s, id }));
+      setCotizaciones(null);
+      avisar("Cotización guardada");
+    } catch {
+      avisar("No se pudo guardar la cotización");
+    } finally {
+      setGuardandoCot(false);
+    }
+  }
+
+  function abrirCotizacion(cg: CotizacionGuardada) {
+    setCotizacion(cg);
+    setTab("cotizacion");
+    avisar("Cotización abierta");
+  }
+
+  async function borrarCotizacionGuardada(id: string) {
+    if (!confirm("¿Eliminar esta cotización guardada?")) return;
+    try {
+      await eliminarCotizacion(id);
+      setCotizaciones((c) => (c ? c.filter((x) => x.id !== id) : c));
+      avisar("Cotización eliminada");
+    } catch {
+      avisar("No se pudo eliminar");
+    }
+  }
+
+  async function descargarCotizacionPDF() {
+    try {
+      await generarCotizacionPDF(cotizacion, emisor);
+      avisar("Cotización descargada");
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudo generar el PDF");
+    }
+  }
+
   async function guardarFotoSiYaExiste(stConFoto: EstadoCanasta) {
     if (!stConFoto.id) {
       avisar("Foto lista. Dale a Guardar canasta para que quede guardada.");
@@ -254,14 +377,6 @@ export default function Costeador({
     }
   }
 
-  async function descargarPDF() {
-    try {
-      await generarPDF(st, emisor);
-      avisar("Cotización descargada");
-    } catch (e) {
-      avisar(e instanceof Error ? e.message : "No se pudo generar el PDF");
-    }
-  }
   async function descargarExcel() {
     try {
       await generarExcel(st);
@@ -300,7 +415,6 @@ export default function Costeador({
           <button className="btn" onClick={guardarCanastaActual} disabled={guardando}>
             {guardando ? "Guardando..." : "Guardar canasta"}
           </button>
-          <button className="btn" onClick={descargarPDF}>Cotización PDF</button>
           <button className="btn primario" onClick={descargarExcel}>Descargar Excel</button>
           <Link href="/cuenta" className="btn chico plano" title={correoUsuaria}>{correoUsuaria}</Link>
           <button className="btn chico plano" onClick={cerrarSesion}>Salir</button>
@@ -456,6 +570,39 @@ export default function Costeador({
                   <button className="btn chico" onClick={agregarOtro}>Agregar concepto</button>
                 </div>
               </div>
+
+              <div className="card">
+                <div className="card-h"><h2>Foto de la canasta</h2><span className="hint">Se guarda con la canasta</span></div>
+                <div className="card-b">
+                  <button className="btn primario chico" onClick={() => setEditorCollage(true)} disabled={!st.items.length}>
+                    Canasta lista (armar foto automática)
+                  </button>
+                  <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--texto-suave)" }}>
+                    Arma un collage con las fotos de los productos de esta canasta. O, si prefieres, sube tu propia foto:
+                  </p>
+                  <input type="file" accept="image/*" style={{ marginTop: 8 }} onChange={(e) => { const f = e.target.files?.[0]; if (f) subirFotoCanasta(f); }} />
+                  <div style={{ marginTop: 12 }}>
+                    {st.fotoUrl ? (
+                      <div className="miniatura">
+                        <img src={st.fotoUrl} alt="Foto de la canasta" />
+                        <button className="btn chico" onClick={() => { const nuevo = { ...st, fotoUrl: "" }; setSt(nuevo); guardarFotoSiYaExiste(nuevo); }}>Quitar foto</button>
+                      </div>
+                    ) : <p style={{ margin: 0, fontSize: 12.5, color: "var(--texto-suave)" }}>Sin foto. La cotización se genera igual, con el detalle en una sola columna.</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="card-h"><h2>Fondo del collage (caja)</h2><span className="hint">La misma para todas las canastas</span></div>
+                <div className="card-b">
+                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) subirCajaFondoEmisor(f); }} />
+                  <div style={{ marginTop: 12 }}>
+                    {cajaFondoUrl ? (
+                      <div className="miniatura"><img src={cajaFondoUrl} alt="Fondo de la caja" /></div>
+                    ) : <p style={{ margin: 0, fontSize: 12.5, color: "var(--texto-suave)" }}>Sin foto de caja. El collage se arma solo con los productos.</p>}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="sticky">
@@ -518,11 +665,19 @@ export default function Costeador({
         )}
 
         {tab === "cotizacion" && (
-          <TabCotizacion st={st} setSt={setSt} emisor={emisor} c={c}
-            onSubirFoto={subirFotoCanasta} onSubirLogo={subirLogoEmisor} onSubirCajaFondo={subirCajaFondoEmisor}
-            onCambiarEmisor={guardarCambiosEmisor} onDescargarPDF={descargarPDF}
-            onAbrirEditorCollage={() => setEditorCollage(true)}
-            onQuitarFoto={() => { const nuevo = { ...st, fotoUrl: "" }; setSt(nuevo); guardarFotoSiYaExiste(nuevo); }} />
+          <TabCotizacion
+            cotizacion={cotizacion} setCotizacion={setCotizacion}
+            historial={historial} emisor={emisor}
+            guardando={guardandoCot}
+            onAgregarCanasta={agregarCanastaACotizacion}
+            onActualizarCantidad={actualizarCantidadCotizacion}
+            onQuitarCanasta={quitarCanastaDeCotizacion}
+            onNueva={nuevaCotizacionActual}
+            onGuardar={guardarCotizacionActual}
+            onDescargarPDF={descargarCotizacionPDF}
+            onSubirLogo={subirLogoEmisor}
+            onCambiarEmisor={guardarCambiosEmisor}
+          />
         )}
 
         {tab === "catalogo" && (
@@ -530,7 +685,10 @@ export default function Costeador({
         )}
 
         {tab === "historial" && (
-          <TabHistorial historial={historial} onAbrir={abrirCanasta} onEliminar={borrarCanastaGuardada} />
+          <TabHistorial
+            historial={historial} onAbrir={abrirCanasta} onEliminar={borrarCanastaGuardada}
+            cotizaciones={cotizaciones} onAbrirCotizacion={abrirCotizacion} onEliminarCotizacion={borrarCotizacionGuardada}
+          />
         )}
       </div>
 
@@ -586,76 +744,121 @@ function FilaCascada({ et, vl, tag, fuerte }: { et: string; vl: string; tag?: st
 }
 
 function TabCotizacion({
-  st, setSt, emisor, c, onSubirFoto, onSubirLogo, onSubirCajaFondo, onCambiarEmisor, onDescargarPDF, onAbrirEditorCollage, onQuitarFoto,
+  cotizacion, setCotizacion, historial, emisor, guardando,
+  onAgregarCanasta, onActualizarCantidad, onQuitarCanasta, onNueva, onGuardar, onDescargarPDF,
+  onSubirLogo, onCambiarEmisor,
 }: {
-  st: EstadoCanasta;
-  setSt: React.Dispatch<React.SetStateAction<EstadoCanasta>>;
+  cotizacion: Cotizacion;
+  setCotizacion: React.Dispatch<React.SetStateAction<Cotizacion>>;
+  historial: CanastaGuardada[] | null;
   emisor: Emisor;
-  c: ReturnType<typeof calcular>;
-  onSubirFoto: (f: File) => void;
-  onSubirLogo: (f: File) => void;
-  onSubirCajaFondo: (f: File) => void;
-  onCambiarEmisor: (cambios: Partial<Emisor>) => void;
+  guardando: boolean;
+  onAgregarCanasta: (h: CanastaGuardada) => void;
+  onActualizarCantidad: (ix: number, cantidad: number) => void;
+  onQuitarCanasta: (ix: number) => void;
+  onNueva: () => void;
+  onGuardar: () => void;
   onDescargarPDF: () => void;
-  onAbrirEditorCollage: () => void;
-  onQuitarFoto: () => void;
+  onSubirLogo: (f: File) => void;
+  onCambiarEmisor: (cambios: Partial<Emisor>) => void;
 }) {
-  const [cajaFondoUrl, setCajaFondoUrl] = useState("");
-
-  useEffect(() => {
-    let cancelado = false;
-    (async () => {
-      if (!emisor.cajaFondoPath) {
-        if (!cancelado) setCajaFondoUrl("");
-        return;
-      }
-      try {
-        const mapa = await urlsFirmadas([emisor.cajaFondoPath]);
-        if (!cancelado) setCajaFondoUrl(mapa[emisor.cajaFondoPath] || "");
-      } catch {
-        if (!cancelado) setCajaFondoUrl("");
-      }
-    })();
-    return () => {
-      cancelado = true;
-    };
-  }, [emisor.cajaFondoPath]);
+  function campo(
+    k: "numeroCot" | "validez" | "empresa" | "ruc" | "contacto" | "cargo" | "correo" | "telefono" | "categoria" | "campana",
+    label: string,
+    placeholder?: string
+  ) {
+    return (
+      <div>
+        <label>{label}</label>
+        <input value={String(cotizacion[k] ?? "")} onChange={(e) => setCotizacion((s) => ({ ...s, [k]: e.target.value }))} placeholder={placeholder} />
+      </div>
+    );
+  }
 
   return (
     <div className="grid">
       <div>
         <div className="card">
-          <div className="card-h"><h2>Datos de la cotización</h2><span className="hint">Empresa, fecha y validez se toman de Armar canasta</span></div>
+          <div className="card-h"><h2>Datos de la cotización</h2><span className="hint">Para el cliente</span></div>
           <div className="card-b">
             <div className="campos">
-              <div><label>Número de cotización</label><input value={st.numeroCot} onChange={(e) => setSt((s) => ({ ...s, numeroCot: e.target.value }))} placeholder="2025-0211" /></div>
-              <div><label>RUC del cliente</label><input value={st.rucCliente} onChange={(e) => setSt((s) => ({ ...s, rucCliente: e.target.value }))} placeholder="20538290310" /></div>
-              <div><label>Contacto</label><input value={st.contacto} onChange={(e) => setSt((s) => ({ ...s, contacto: e.target.value }))} placeholder="Nombre y apellido" /></div>
-              <div><label>Teléfono del contacto</label><input value={st.telefono} onChange={(e) => setSt((s) => ({ ...s, telefono: e.target.value }))} placeholder="977 634 180" /></div>
+              {campo("numeroCot", "Número de cotización", "2026-0001")}
+              <div><label>Fecha</label><input type="date" value={cotizacion.fecha} onChange={(e) => setCotizacion((s) => ({ ...s, fecha: e.target.value }))} /></div>
+              {campo("validez", "Validez de la oferta")}
+              {campo("empresa", "Empresa", "Razón social del cliente")}
+              {campo("ruc", "RUC", "20538290310")}
+              {campo("contacto", "Contacto", "Nombre y apellido")}
+              {campo("cargo", "Cargo", "Cargo del contacto")}
+              {campo("correo", "Correo", "correo@empresa.com")}
+              {campo("telefono", "Teléfono", "999 999 999")}
+              {campo("categoria", "Categoría")}
+              {campo("campana", "Campaña")}
             </div>
           </div>
         </div>
 
         <div className="card">
-          <div className="card-h"><h2>Condiciones comerciales</h2><span className="hint">Una condición por línea</span></div>
-          <div className="card-b"><textarea rows={5} value={st.condiciones} onChange={(e) => setSt((s) => ({ ...s, condiciones: e.target.value }))} /></div>
+          <div className="card-h"><h2>Canastas incluidas</h2><span className="hint">{cotizacion.canastas.length} en esta cotización</span></div>
+          <div className="card-b">
+            {historial === null ? (
+              <div className="vacio">Cargando...</div>
+            ) : !historial.length ? (
+              <div className="vacio"><strong>No tienes canastas guardadas</strong>Arma y guarda una canasta primero, en la pestaña Armar canasta.</div>
+            ) : (
+              <div className="cat-lista" style={{ marginBottom: cotizacion.canastas.length ? 14 : 0 }}>
+                {historial.map((h) => {
+                  const yaAgregada = cotizacion.canastas.some((x) => x.canastaId === h.id);
+                  return (
+                    <div key={h.id} className="cat-fila" tabIndex={0} role="button"
+                      onClick={() => onAgregarCanasta(h)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAgregarCanasta(h); } }}
+                      style={yaAgregada ? { opacity: 0.5 } : undefined}>
+                      <span className="nom">{h.nombre || "Sin nombre"}<small>{h.items.length} productos{h.nivel ? " · " + h.nivel : ""}</small></span>
+                      <span className="mas">{yaAgregada ? "✓" : "+"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {cotizacion.canastas.length > 0 && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Canasta</th>
+                    <th className="num" style={{ width: 84 }}>Cantidad</th>
+                    <th className="num" style={{ width: 100 }}>P. unit.</th>
+                    <th className="num" style={{ width: 100 }}>Total</th>
+                    <th style={{ width: 34 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cotizacion.canastas.map((it, ix) => (
+                    <tr key={ix}>
+                      <td>{it.nombre}<small style={{ display: "block", color: "var(--texto-suave)", fontSize: 11.5 }}>{it.items.length} productos</small></td>
+                      <td className="num"><input className="w-cant num" type="number" min={1} step={1} value={it.cantidad} onChange={(e) => onActualizarCantidad(ix, Number(e.target.value) || 1)} /></td>
+                      <td className="num">{S(it.precioUnitario)}</td>
+                      <td className="num" style={{ fontWeight: 600 }}>{S(it.precioUnitario * it.cantidad)}</td>
+                      <td><button className="quitar" onClick={() => onQuitarCanasta(ix)} title="Quitar">×</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
         <div className="card">
-          <div className="card-h"><h2>Foto de la canasta</h2><span className="hint">Se guarda con la canasta</span></div>
+          <div className="card-h"><h2>Condiciones comerciales</h2><span className="hint">Una condición por línea</span></div>
+          <div className="card-b"><textarea rows={6} value={cotizacion.condiciones} onChange={(e) => setCotizacion((s) => ({ ...s, condiciones: e.target.value }))} /></div>
+        </div>
+
+        <div className="card">
+          <div className="card-h"><h2>Firma</h2><span className="hint">Quién envía la cotización</span></div>
           <div className="card-b">
-            <button className="btn primario chico" onClick={onAbrirEditorCollage} disabled={!st.items.length}>
-              Canasta lista (armar foto automática)
-            </button>
-            <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--texto-suave)" }}>
-              Arma un collage con las fotos de los productos de esta canasta. O, si prefieres, sube tu propia foto:
-            </p>
-            <input type="file" accept="image/*" style={{ marginTop: 8 }} onChange={(e) => { const f = e.target.files?.[0]; if (f) onSubirFoto(f); }} />
-            <div style={{ marginTop: 12 }}>
-              {st.fotoUrl ? (
-                <div className="miniatura"><img src={st.fotoUrl} alt="Foto de la canasta" /><button className="btn chico" onClick={onQuitarFoto}>Quitar foto</button></div>
-              ) : <p style={{ margin: 0, fontSize: 12.5, color: "var(--texto-suave)" }}>Sin foto. La cotización se genera igual, con el detalle en una sola columna.</p>}
-            </div>
+            <select value={cotizacion.firmante} onChange={(e) => setCotizacion((s) => ({ ...s, firmante: e.target.value }))}>
+              <option value="">Elegir quién firma...</option>
+              {FIRMANTES.map((f) => <option key={f.nombre} value={f.nombre}>{f.nombre}</option>)}
+            </select>
           </div>
         </div>
 
@@ -663,7 +866,7 @@ function TabCotizacion({
           <div className="card-h"><h2>Datos del emisor</h2><span className="hint">Se guardan para todas tus cotizaciones</span></div>
           <div className="card-b">
             <div className="campos">
-              <div><label>Razón comercial</label><input value={emisor.razon} onChange={(e) => onCambiarEmisor({ razon: e.target.value })} placeholder="Altum Vida" /></div>
+              <div><label>Razón comercial</label><input value={emisor.razon} onChange={(e) => onCambiarEmisor({ razon: e.target.value })} placeholder="G&C Co." /></div>
               <div><label>RUC</label><input value={emisor.ruc} onChange={(e) => onCambiarEmisor({ ruc: e.target.value })} placeholder="10108801994" /></div>
               <div><label>Teléfonos</label><input value={emisor.telefonos} onChange={(e) => onCambiarEmisor({ telefonos: e.target.value })} placeholder="970 418 062 · 985 319 051" /></div>
               <div><label>Correo</label><input value={emisor.correo} onChange={(e) => onCambiarEmisor({ correo: e.target.value })} placeholder="correo@empresa.com" /></div>
@@ -681,37 +884,29 @@ function TabCotizacion({
             </div>
           </div>
         </div>
-
-        <div className="card">
-          <div className="card-h"><h2>Fondo del collage (caja)</h2><span className="hint">La misma para todas las canastas</span></div>
-          <div className="card-b">
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { const f = e.target.files?.[0]; if (f) onSubirCajaFondo(f); }} />
-            <div style={{ marginTop: 12 }}>
-              {cajaFondoUrl ? (
-                <div className="miniatura"><img src={cajaFondoUrl} alt="Fondo de la caja" /></div>
-              ) : <p style={{ margin: 0, fontSize: 12.5, color: "var(--texto-suave)" }}>Sin foto de caja. El collage se arma solo con los productos.</p>}
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="sticky">
         <div className="card">
-          <div className="card-h"><h2>Vista previa del contenido</h2></div>
+          <div className="card-h"><h2>Resumen</h2></div>
           <div className="card-b">
-            {st.items.length ? (
-              <>
-                <div style={{ fontSize: 12, color: "var(--texto-suave)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 650 }}>{st.nombre || "Canasta sin nombre"}</div>
-                <div style={{ display: "flex", gap: 18, margin: "8px 0 14px", fontVariantNumeric: "tabular-nums" }}>
-                  <div><div style={{ fontSize: 11, color: "var(--texto-suave)" }}>Cantidad</div><b>{c.unidades}</b></div>
-                  <div><div style={{ fontSize: 11, color: "var(--texto-suave)" }}>P. unitario</div><b>{S(c.precioFinal)}</b></div>
-                  <div><div style={{ fontSize: 11, color: "var(--texto-suave)" }}>Total</div><b style={{ color: "var(--azul)" }}>{S(c.totalFinal)}</b></div>
-                </div>
-                <ul className="prev-lista">{st.items.map((i, ix) => <li key={ix}><b>{i.cantidad}</b><span>{i.nombre}</span></li>)}</ul>
-              </>
-            ) : <div className="vacio" style={{ padding: "20px 0" }}><strong>Todavía no hay productos</strong>Arma la canasta y vuelve a esta pestaña.</div>}
-            <button className="btn primario" style={{ width: "100%", marginTop: 16 }} onClick={onDescargarPDF}>Descargar PDF de la cotización</button>
-            <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--texto-suave)" }}>El PDF sale en una hoja A4 con el logo, los datos del cliente, el detalle de la canasta y las condiciones. No muestra costos ni márgenes.</p>
+            {cotizacion.canastas.length ? (
+              <ul className="prev-lista">
+                {cotizacion.canastas.map((it, ix) => (
+                  <li key={ix}><b>{it.cantidad}</b><span>{it.nombre} · {S(it.precioUnitario)} c/u</span></li>
+                ))}
+              </ul>
+            ) : (
+              <div className="vacio" style={{ padding: "20px 0" }}><strong>Sin canastas todavía</strong>Agrega canastas de tu historial guardado.</div>
+            )}
+            <button className="btn" style={{ width: "100%", marginTop: 14 }} onClick={onGuardar} disabled={guardando}>
+              {guardando ? "Guardando..." : "Guardar cotización"}
+            </button>
+            <button className="btn primario" style={{ width: "100%", marginTop: 8 }} onClick={onDescargarPDF}>Descargar PDF de la cotización</button>
+            <button className="btn chico plano" style={{ width: "100%", marginTop: 8 }} onClick={onNueva}>Nueva cotización</button>
+            <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--texto-suave)" }}>
+              El PDF sale con el formato corporativo: resumen de las canastas, detalle de cada una con su foto y productos, condiciones comerciales y la firma de quien la envía.
+            </p>
           </div>
         </div>
       </div>
@@ -906,34 +1101,61 @@ function TabCatalogo({
 }
 
 function TabHistorial({
-  historial, onAbrir, onEliminar,
+  historial, onAbrir, onEliminar, cotizaciones, onAbrirCotizacion, onEliminarCotizacion,
 }: {
   historial: CanastaGuardada[] | null;
   onAbrir: (h: CanastaGuardada, comoCopia: boolean) => void;
   onEliminar: (id: string) => void;
+  cotizaciones: CotizacionGuardada[] | null;
+  onAbrirCotizacion: (cg: CotizacionGuardada) => void;
+  onEliminarCotizacion: (id: string) => void;
 }) {
   return (
-    <div className="card">
-      <div className="card-h"><h2>Canastas guardadas</h2><span className="hint">Abre una para editarla o duplícala para crear una variante</span></div>
-      <div className="card-b">
-        {historial === null ? (
-          <div className="vacio">Cargando...</div>
-        ) : !historial.length ? (
-          <div className="vacio"><strong>Aún no guardan ninguna canasta</strong>Arma una y usa Guardar canasta para tenerla lista la próxima vez.</div>
-        ) : (
-          historial.map((h) => (
-            <div className="hist" key={h.id}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="h-nom">{h.nombre || "Sin nombre"} <span className="chip">{h.codigo || "sin código"}</span></div>
-                <div className="h-met">{h.items.length} productos · {h.unidades} {h.unidades === 1 ? "canasta" : "canastas"} · guardada el {new Date(h.creadaEn).toLocaleDateString("es-PE")}</div>
+    <>
+      <div className="card">
+        <div className="card-h"><h2>Canastas guardadas</h2><span className="hint">Abre una para editarla o duplícala para crear una variante</span></div>
+        <div className="card-b">
+          {historial === null ? (
+            <div className="vacio">Cargando...</div>
+          ) : !historial.length ? (
+            <div className="vacio"><strong>Aún no guardan ninguna canasta</strong>Arma una y usa Guardar canasta para tenerla lista la próxima vez.</div>
+          ) : (
+            historial.map((h) => (
+              <div className="hist" key={h.id}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="h-nom">{h.nombre || "Sin nombre"} <span className="chip">{h.codigo || "sin código"}</span></div>
+                  <div className="h-met">{h.items.length} productos · {h.unidades} {h.unidades === 1 ? "canasta" : "canastas"} · guardada el {new Date(h.creadaEn).toLocaleDateString("es-PE")}</div>
+                </div>
+                <button className="btn chico" onClick={() => onAbrir(h, false)}>Abrir</button>
+                <button className="btn chico" onClick={() => onAbrir(h, true)}>Duplicar</button>
+                <button className="btn chico plano" onClick={() => onEliminar(h.id)}>Eliminar</button>
               </div>
-              <button className="btn chico" onClick={() => onAbrir(h, false)}>Abrir</button>
-              <button className="btn chico" onClick={() => onAbrir(h, true)}>Duplicar</button>
-              <button className="btn chico plano" onClick={() => onEliminar(h.id)}>Eliminar</button>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
-    </div>
+
+      <div className="card">
+        <div className="card-h"><h2>Cotizaciones guardadas</h2><span className="hint">Ábrelas para editarlas o volver a descargar el PDF</span></div>
+        <div className="card-b">
+          {cotizaciones === null ? (
+            <div className="vacio">Cargando...</div>
+          ) : !cotizaciones.length ? (
+            <div className="vacio"><strong>Aún no guardan ninguna cotización</strong>Arma una en la pestaña Cotización y usa Guardar cotización.</div>
+          ) : (
+            cotizaciones.map((cg) => (
+              <div className="hist" key={cg.id}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="h-nom">{cg.empresa || "Sin empresa"} <span className="chip">{cg.numeroCot || "sin número"}</span></div>
+                  <div className="h-met">{cg.canastas.length} {cg.canastas.length === 1 ? "canasta" : "canastas"} · guardada el {new Date(cg.creadaEn).toLocaleDateString("es-PE")}</div>
+                </div>
+                <button className="btn chico" onClick={() => onAbrirCotizacion(cg)}>Abrir</button>
+                <button className="btn chico plano" onClick={() => onEliminarCotizacion(cg.id)}>Eliminar</button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </>
   );
 }

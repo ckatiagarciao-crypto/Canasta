@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { CATALOGO_BASE } from "@/lib/catalogoBase";
 import { recortarMargenes } from "@/lib/imagen";
-import type { CanastaGuardada, Emisor, EstadoCanasta, Producto } from "@/lib/tipos";
+import type { CanastaGuardada, Cotizacion, CotizacionGuardada, Emisor, EstadoCanasta, Producto } from "@/lib/tipos";
 
 const BUCKET_FOTOS = "fotos-productos";
 const PATH_CAJA_FONDO_PREFIJO = "_fondo-caja";
@@ -111,11 +111,6 @@ type FilaCanasta = {
   fecha: string | null;
   unidades: number;
   validez: string | null;
-  numero_cot: string | null;
-  ruc_cliente: string | null;
-  contacto: string | null;
-  telefono: string | null;
-  condiciones: string | null;
   armado: number;
   armado_manual: boolean;
   nivel: string | null;
@@ -139,11 +134,6 @@ function filaACanasta(f: FilaCanasta): CanastaGuardada {
     fecha: f.fecha ?? "",
     unidades: f.unidades ?? 1,
     validez: f.validez ?? "",
-    numeroCot: f.numero_cot ?? "",
-    rucCliente: f.ruc_cliente ?? "",
-    contacto: f.contacto ?? "",
-    telefono: f.telefono ?? "",
-    condiciones: f.condiciones ?? "",
     items: (f.canasta_items ?? []).map((i) => ({
       cod: i.cod ?? "",
       nombre: i.nombre,
@@ -184,11 +174,6 @@ export async function guardarCanasta(st: EstadoCanasta): Promise<string> {
     fecha: st.fecha || null,
     unidades: Math.max(1, Math.round(Number(st.unidades) || 1)),
     validez: st.validez,
-    numero_cot: st.numeroCot,
-    ruc_cliente: st.rucCliente,
-    contacto: st.contacto,
-    telefono: st.telefono,
-    condiciones: st.condiciones,
     armado: st.armado,
     armado_manual: st.armadoManual,
     nivel: st.nivel || null,
@@ -250,6 +235,87 @@ export async function guardarCanasta(st: EstadoCanasta): Promise<string> {
 export async function eliminarCanasta(id: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("canastas").delete().eq("id", id);
+  if (error) throw error;
+}
+
+type FilaCotizacion = {
+  id: string;
+  numero_cot: string | null;
+  fecha: string | null;
+  validez: string | null;
+  empresa: string | null;
+  ruc: string | null;
+  contacto: string | null;
+  cargo: string | null;
+  correo: string | null;
+  telefono: string | null;
+  categoria: string | null;
+  campana: string | null;
+  condiciones: string | null;
+  firmante: string | null;
+  canastas: Cotizacion["canastas"];
+  created_at: string;
+};
+
+function filaACotizacion(f: FilaCotizacion): CotizacionGuardada {
+  return {
+    id: f.id,
+    numeroCot: f.numero_cot ?? "",
+    fecha: f.fecha ?? "",
+    validez: f.validez ?? "",
+    empresa: f.empresa ?? "",
+    ruc: f.ruc ?? "",
+    contacto: f.contacto ?? "",
+    cargo: f.cargo ?? "",
+    correo: f.correo ?? "",
+    telefono: f.telefono ?? "",
+    categoria: f.categoria ?? "",
+    campana: f.campana ?? "",
+    condiciones: f.condiciones ?? "",
+    firmante: f.firmante ?? "",
+    canastas: f.canastas ?? [],
+    creadaEn: f.created_at,
+  };
+}
+
+export async function listarCotizaciones(): Promise<CotizacionGuardada[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("cotizaciones").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as unknown as FilaCotizacion[]).map(filaACotizacion);
+}
+
+export async function guardarCotizacion(cot: Cotizacion): Promise<string> {
+  const supabase = createClient();
+  const fila = {
+    numero_cot: cot.numeroCot,
+    fecha: cot.fecha || null,
+    validez: cot.validez,
+    empresa: cot.empresa,
+    ruc: cot.ruc,
+    contacto: cot.contacto,
+    cargo: cot.cargo,
+    correo: cot.correo,
+    telefono: cot.telefono,
+    categoria: cot.categoria,
+    campana: cot.campana,
+    condiciones: cot.condiciones,
+    firmante: cot.firmante,
+    canastas: cot.canastas,
+  };
+  if (cot.id) {
+    const { error } = await supabase.from("cotizaciones").update(fila).eq("id", cot.id);
+    if (error) throw error;
+    return cot.id;
+  }
+  const { data, error } = await supabase.from("cotizaciones").insert(fila).select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function eliminarCotizacion(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("cotizaciones").delete().eq("id", id);
   if (error) throw error;
 }
 

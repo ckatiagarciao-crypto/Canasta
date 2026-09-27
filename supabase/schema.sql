@@ -40,6 +40,8 @@ create table canastas (
   condiciones text,
   armado numeric(10,2) not null default 5,
   armado_manual boolean not null default false,
+  nivel text,
+  costo_fijo numeric(10,2) not null default 0,
   margen numeric(5,2) not null default 30,
   tipo_margen text not null default 'costo',
   descuento numeric(5,2) not null default 0,
@@ -67,11 +69,38 @@ create table canasta_otros (
   monto numeric(10,2) not null default 0
 );
 
+-- Una cotización agrupa varias canastas (cada una con su cantidad). El
+-- contenido de cada canasta se guarda tal cual estaba al armar la
+-- cotización (nombre, nivel, precio, productos y foto) en la columna
+-- "canastas", para que la cotización no cambie si luego se edita o se
+-- borra la canasta original en el historial.
+create table cotizaciones (
+  id uuid primary key default gen_random_uuid(),
+  numero_cot text,
+  fecha date,
+  validez text,
+  empresa text,
+  ruc text,
+  contacto text,
+  cargo text,
+  correo text,
+  telefono text,
+  categoria text,
+  campana text,
+  condiciones text,
+  firmante text,
+  canastas jsonb not null default '[]'::jsonb,
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table productos enable row level security;
 alter table emisor enable row level security;
 alter table canastas enable row level security;
 alter table canasta_items enable row level security;
 alter table canasta_otros enable row level security;
+alter table cotizaciones enable row level security;
 
 create policy "equipo autenticado usa productos" on productos
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
@@ -82,6 +111,8 @@ create policy "equipo autenticado usa canastas" on canastas
 create policy "equipo autenticado usa canasta_items" on canasta_items
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "equipo autenticado usa canasta_otros" on canasta_otros
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "equipo autenticado usa cotizaciones" on cotizaciones
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- IMPORTANTE: como el proyecto se creó con "Automatically expose new tables"
@@ -94,6 +125,7 @@ grant select, insert, update, delete on canastas to authenticated;
 grant select, insert, update, delete on canasta_items to authenticated;
 grant select, insert, update, delete on canasta_otros to authenticated;
 grant select, insert, update, delete on emisor to authenticated;
+grant select, insert, update, delete on cotizaciones to authenticated;
 
 -- El catálogo base va aparte, en lib/catalogoBase.ts (mismos datos, en
 -- TypeScript). Si hay que volver a cargarlo a mano, usar ese archivo como
