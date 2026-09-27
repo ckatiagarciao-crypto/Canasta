@@ -26,6 +26,7 @@ import {
 import { CATEGORIAS, nuevoEstado, nuevoEmisor } from "@/lib/tipos";
 import type { CanastaGuardada, Emisor, EstadoCanasta, ItemCanasta, Producto } from "@/lib/tipos";
 import { NIVELES, nivelPorCodigo } from "@/lib/niveles";
+import { PLANTILLAS, plantillaPorCodigo } from "@/lib/plantillas";
 import EditorCollage from "@/components/EditorCollage";
 import MaestroImagenes from "@/components/MaestroImagenes";
 
@@ -126,6 +127,37 @@ export default function Costeador({
       margen: nivel ? nivel.margen : s.margen,
       costoFijo: nivel ? nivel.costoFijo : 0,
     }));
+  }
+
+  function usarPlantilla(codigo: string) {
+    const plantilla = plantillaPorCodigo(codigo);
+    if (!plantilla) return;
+    if (st.items.length && !confirm("Se reemplazará el contenido actual de la canasta por el de la plantilla. ¿Continuar?")) return;
+    const nivel = nivelPorCodigo(plantilla.nivel);
+    const items: ItemCanasta[] = [];
+    const faltantes: string[] = [];
+    plantilla.items.forEach((pi) => {
+      const p = productos.find((x) => x.cod === pi.cod);
+      if (!p) {
+        faltantes.push(pi.cod);
+        return;
+      }
+      items.push({ cod: p.cod, nombre: p.nombre, proveedor: p.proveedor, precio_unitario: p.precio_unitario, cantidad: pi.cantidad });
+    });
+    setSt((s) => ({
+      ...s,
+      nombre: plantilla.nombre,
+      nivel: plantilla.nivel,
+      margen: nivel ? nivel.margen : s.margen,
+      costoFijo: nivel ? nivel.costoFijo : s.costoFijo,
+      items,
+      armadoManual: false,
+    }));
+    avisar(
+      faltantes.length
+        ? `Plantilla cargada. No se encontraron ${faltantes.length} producto(s) en el catálogo: ${faltantes.join(", ")}`
+        : "Plantilla \"" + plantilla.nombre + "\" cargada"
+    );
   }
 
   async function guardarCanastaActual() {
@@ -289,6 +321,21 @@ export default function Costeador({
               <div className="card">
                 <div className="card-h"><h2>Datos de la canasta</h2></div>
                 <div className="card-b">
+                  <div className="campos" style={{ marginBottom: 14 }}>
+                    <div style={{ gridColumn: "span 2" }}>
+                      <label>Empezar desde una plantilla (opcional)</label>
+                      <select value="" onChange={(e) => { if (e.target.value) usarPlantilla(e.target.value); }}>
+                        <option value="">Elegir una de las 11 canastas del catálogo 2026...</option>
+                        {NIVELES.map((n) => (
+                          <optgroup key={n.codigo} label={n.nombre}>
+                            {PLANTILLAS.filter((p) => p.nivel === n.codigo).map((p) => (
+                              <option key={p.codigo} value={p.codigo}>{p.nombre}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                   <div className="campos">
                     <div><label>Nombre de la canasta</label><input value={st.nombre} onChange={(e) => setSt((s) => ({ ...s, nombre: e.target.value }))} placeholder="Canasta Premium 2026" /></div>
                     <div><label>Código</label><input value={st.codigo} onChange={(e) => setSt((s) => ({ ...s, codigo: e.target.value }))} placeholder="CN-2026-001" /></div>
