@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcular, unidadesArmado, armadoSugerido } from "./calculo";
+import { calcular, unidadesArmado, armadoSugerido, RENTA } from "./calculo";
 import { nuevoEstado } from "./tipos";
 import type { EstadoCanasta } from "./tipos";
 
@@ -24,85 +24,89 @@ describe("unidadesArmado", () => {
 describe("armadoSugerido", () => {
   const itemsCon = (n: number) => [{ cod: "A", nombre: "A", proveedor: "", precio_unitario: 1, cantidad: n }];
 
-  it("sugiere S/ 5 hasta 8 ítems", () => {
-    expect(armadoSugerido(itemsCon(8))).toBe(5);
+  it("sugiere S/ 5 hasta 12 ítems", () => {
+    expect(armadoSugerido(itemsCon(12))).toBe(5);
   });
-  it("sugiere S/ 10 de 9 a 15 ítems", () => {
-    expect(armadoSugerido(itemsCon(9))).toBe(10);
-    expect(armadoSugerido(itemsCon(15))).toBe(10);
+  it("sugiere S/ 10 de 13 a 18 ítems", () => {
+    expect(armadoSugerido(itemsCon(13))).toBe(10);
+    expect(armadoSugerido(itemsCon(18))).toBe(10);
   });
-  it("sugiere S/ 15 con 16 ítems o más", () => {
-    expect(armadoSugerido(itemsCon(16))).toBe(15);
+  it("sugiere S/ 15 con 19 ítems o más", () => {
+    expect(armadoSugerido(itemsCon(19))).toBe(15);
   });
 });
 
 describe("calcular", () => {
-  it("calcula el precio y la utilidad sin IGV (caso de referencia)", () => {
+  it("calcula el costo con el alquiler del nivel dentro de la base del gasto administrativo", () => {
     const st = estadoBase({
-      items: [{ cod: "A", nombre: "Producto", proveedor: "Prov", precio_unitario: 100, cantidad: 1 }],
-      otros: [],
+      items: [{ cod: "A", nombre: "Producto", proveedor: "", precio_unitario: 100, cantidad: 1 }],
       armado: 10,
+      costoFijo: 8,
       margen: 20,
       tipoMargen: "costo",
       descuento: 0,
       factura: false,
-      unidades: 1,
     });
     const c = calcular(st);
 
     expect(c.itemsBase).toBeCloseTo(100, 6);
-    expect(c.admin).toBeCloseTo(5.5, 6);
-    expect(c.costo).toBeCloseTo(115.5, 6);
-    expect(c.venta).toBeCloseTo(138.6, 6);
-    expect(c.igv).toBe(0);
-    // 138.6 ya es múltiplo de 0.10, así que el redondeo no lo cambia.
-    expect(c.precioFinal).toBeCloseTo(138.6, 6);
-    expect(c.utilidad).toBeCloseTo(23.1, 6);
-    // Régimen Especial: 1.5% de la venta (138.6), no 10% de la utilidad.
-    expect(c.ir).toBeCloseTo(2.079, 6);
-    expect(c.utilidadNeta).toBeCloseTo(21.021, 6);
-    expect(c.margenNeto).toBeCloseTo(15.1667, 3);
-    expect(c.totalFinal).toBeCloseTo(138.6, 6);
+    expect(c.alquiler).toBe(8);
+    // El 3.5% se calcula sobre insumos + armado + alquiler, no solo insumos + armado.
+    expect(c.admin).toBeCloseTo((100 + 10 + 8) * 0.035, 6);
+    expect(c.costo).toBeCloseTo(100 + 10 + 8 + c.admin, 6);
   });
 
-  it("redondea el precio final hacia arriba, al décimo de sol", () => {
+  it("sube la venta lo justo para conservar el margen a pesar del impuesto (tratamiento SUMA)", () => {
     const st = estadoBase({
-      items: [{ cod: "A", nombre: "Producto", proveedor: "", precio_unitario: 33, cantidad: 1 }],
+      items: [{ cod: "A", nombre: "Producto", proveedor: "", precio_unitario: 200, cantidad: 1 }],
+      armado: 15,
+      costoFijo: 6.25,
+      margen: 25,
+      tipoMargen: "costo",
+      factura: false,
+    });
+    const c = calcular(st);
+
+    // La venta (antes de IGV, antes de redondear) debe ser exactamente
+    // costo*(1+margen) subido por el impuesto a la renta, para que el
+    // margen puesto se cumpla pase lo que pase con el impuesto.
+    expect(c.venta).toBeCloseTo((c.costo * 1.25) / (1 - RENTA), 6);
+  });
+
+  it("calcula la utilidad neta como la utilidad menos el impuesto a la renta", () => {
+    const st = estadoBase({
+      items: [{ cod: "A", nombre: "Producto", proveedor: "", precio_unitario: 150, cantidad: 1 }],
+      armado: 10,
+      costoFijo: 5,
+      margen: 22,
+      factura: true,
+    });
+    const c = calcular(st);
+    expect(c.ir).toBeCloseTo(c.ventaFinal * RENTA, 6);
+    expect(c.utilidadNeta).toBeCloseTo(c.utilidad - c.ir, 6);
+  });
+
+  it("redondea el precio final al sol entero hacia arriba y le resta 10 céntimos", () => {
+    const st = estadoBase({
+      items: [{ cod: "A", nombre: "Producto", proveedor: "", precio_unitario: 100, cantidad: 1 }],
       armado: 0,
+      costoFijo: 0,
       margen: 0,
       tipoMargen: "costo",
       descuento: 0,
       factura: false,
     });
     const c = calcular(st);
-
-    // costo = 33 + 5% = 34.65 -> el precio de venta cae en un múltiplo de
-    // 0.05 que no es múltiplo de 0.10, así que debe subir a 34.70.
-    expect(c.costo).toBeCloseTo(34.65, 6);
-    expect(c.precioFinal).toBeCloseTo(34.7, 6);
-  });
-
-  it("recalcula la utilidad y el impuesto a partir del precio ya redondeado", () => {
-    const st = estadoBase({
-      items: [{ cod: "A", nombre: "Producto", proveedor: "", precio_unitario: 33, cantidad: 1 }],
-      armado: 0,
-      margen: 0,
-      tipoMargen: "costo",
-      descuento: 0,
-      factura: false,
-    });
-    const c = calcular(st);
-
-    // ventaFinal debe ser el precio YA redondeado (34.70), no el crudo (34.65).
-    expect(c.ventaFinal).toBeCloseTo(34.7, 6);
-    expect(c.ir).toBeCloseTo(34.7 * 0.015, 6);
-    expect(c.utilidad).toBeCloseTo(34.7 - c.costo, 6);
+    // costo = 100 + 3.5 (admin) = 103.5; venta = 103.5 / (1 - 0.015) = 105.076...
+    // redondeado al sol de arriba (106) y menos 10 céntimos = 105.90
+    expect(c.precioFinal).toBeCloseTo(105.9, 6);
   });
 
   it("agrega el IGV cuando la canasta emite factura", () => {
     const st = estadoBase({
       items: [{ cod: "A", nombre: "Producto", proveedor: "Prov", precio_unitario: 118, cantidad: 1 }],
       armado: 0,
+      costoFijo: 0,
       margen: 0,
       tipoMargen: "costo",
       factura: true,
@@ -136,12 +140,8 @@ describe("calcular", () => {
       factura: false,
     });
     const c = calcular(st);
-    // A diferencia del régimen general, el RER cobra 1.5% de la venta
-    // aunque el costo sea mayor que el precio: no se libra de impuesto por
-    // tener pérdida.
-    expect(c.utilidad).toBeLessThan(0);
     expect(c.ir).toBeGreaterThan(0);
-    expect(c.ir).toBeCloseTo(c.ventaFinal * 0.015, 6);
+    expect(c.ir).toBeCloseTo(c.ventaFinal * RENTA, 6);
     expect(c.utilidadNeta).toBeCloseTo(c.utilidad - c.ir, 6);
   });
 

@@ -1,8 +1,10 @@
 import type { EstadoCanasta } from "./tipos";
 
 export const IGV = 0.18;
-export const ADMIN = 0.05;
-// Régimen Especial de Renta (RER): 1.5% sobre la venta, no sobre la utilidad.
+export const ADMIN = 0.035;
+// Régimen Especial de Renta (RER): 1.5% de la venta. Se traslada al precio
+// (no se resta de la utilidad), así que el margen que pones es el margen
+// que te queda, pase lo que pase con el impuesto.
 export const RENTA = 0.015;
 
 export function unidadesArmado(items: EstadoCanasta["items"]): number {
@@ -11,13 +13,14 @@ export function unidadesArmado(items: EstadoCanasta["items"]): number {
 
 export function armadoSugerido(items: EstadoCanasta["items"]): number {
   const n = unidadesArmado(items);
-  return n <= 8 ? 5 : n <= 15 ? 10 : 15;
+  return n <= 12 ? 5 : n <= 18 ? 10 : 15;
 }
 
 export type ResultadoCalculo = {
   items: number;
   otros: number;
   armado: number;
+  alquiler: number;
   admin: number;
   itemsBase: number;
   otrosBase: number;
@@ -47,23 +50,29 @@ export function calcular(st: EstadoCanasta): ResultadoCalculo {
   const items = st.items.reduce((a, i) => a + (Number(i.precio_unitario) || 0) * (Number(i.cantidad) || 0), 0);
   const otros = st.otros.reduce((a, o) => a + (Number(o.monto) || 0), 0);
   const armado = Number(st.armado ?? 5) || 0;
+  const alquiler = Number(st.costoFijo ?? 0) || 0;
   const itemsBase = st.factura ? items / (1 + IGV) : items;
   const otrosBase = st.factura ? otros / (1 + IGV) : otros;
-  const admin = (itemsBase + armado) * ADMIN;
-  const costo = itemsBase + otrosBase + armado + admin;
-  const desembolso = items + otros + armado + admin;
+  const admin = (itemsBase + armado + alquiler) * ADMIN;
+  const costo = itemsBase + otrosBase + armado + alquiler + admin;
+  const desembolso = items + otros + armado + alquiler + admin;
   const m = Math.min(Math.max(Number(st.margen) || 0, 0), 95) / 100;
-  let venta = st.tipoMargen === "venta" ? costo / (1 - m || 1) : costo * (1 + m);
-  if (!isFinite(venta)) venta = costo;
+  let ventaSinRenta = st.tipoMargen === "venta" ? costo / (1 - m || 1) : costo * (1 + m);
+  if (!isFinite(ventaSinRenta)) ventaSinRenta = costo;
+  // El impuesto a la renta se traslada al precio: se sube la venta lo
+  // justo para que, después de pagar el 1.5% de RER, el margen puesto
+  // arriba se cumpla igual.
+  const venta = ventaSinRenta / (1 - RENTA);
   const igv = st.factura ? venta * IGV : 0;
   const precioCliente = venta + igv;
   const d = Math.min(Math.max(Number(st.descuento) || 0, 0), 100) / 100;
   const montoDcto = precioCliente * d;
   const precioFinalCrudo = precioCliente - montoDcto;
-  // El precio que se cobra se redondea al décimo de sol superior (83.25 -> 83.30),
-  // y de ahí para abajo todo se recalcula sobre ese precio ya redondeado, para que
-  // el desglose siempre sume exactamente el precio final mostrado.
-  const precioFinal = Math.ceil(precioFinalCrudo * 10) / 10;
+  // El precio de lista redondea al sol entero hacia arriba, y de ahí se le
+  // resta 10 céntimos (el ".90" con el que se publican los precios). Todo
+  // lo demás se recalcula desde ese precio ya definitivo, para que el
+  // desglose siempre sume exacto.
+  const precioFinal = Math.ceil(precioFinalCrudo) - 0.1;
   const ventaFinal = st.factura ? precioFinal / (1 + IGV) : precioFinal;
   const utilidad = ventaFinal - costo;
   const ir = Math.max(ventaFinal, 0) * RENTA;
@@ -76,6 +85,7 @@ export function calcular(st: EstadoCanasta): ResultadoCalculo {
     items,
     otros,
     armado,
+    alquiler,
     admin,
     itemsBase,
     otrosBase,

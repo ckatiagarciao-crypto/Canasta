@@ -118,6 +118,8 @@ type FilaCanasta = {
   condiciones: string | null;
   armado: number;
   armado_manual: boolean;
+  nivel: string | null;
+  costo_fijo: number | null;
   margen: number;
   tipo_margen: "costo" | "venta";
   descuento: number;
@@ -152,6 +154,8 @@ function filaACanasta(f: FilaCanasta): CanastaGuardada {
     otros: (f.canasta_otros ?? []).map((o) => ({ concepto: o.concepto ?? "", monto: Number(o.monto) })),
     armado: Number(f.armado),
     armadoManual: f.armado_manual,
+    nivel: f.nivel ?? "",
+    costoFijo: Number(f.costo_fijo ?? 0),
     margen: Number(f.margen),
     tipoMargen: f.tipo_margen,
     descuento: Number(f.descuento),
@@ -187,6 +191,8 @@ export async function guardarCanasta(st: EstadoCanasta): Promise<string> {
     condiciones: st.condiciones,
     armado: st.armado,
     armado_manual: st.armadoManual,
+    nivel: st.nivel || null,
+    costo_fijo: st.costoFijo,
     margen: st.margen,
     tipo_margen: st.tipoMargen,
     descuento: st.descuento,

@@ -25,6 +25,7 @@ import {
 } from "@/lib/db";
 import { CATEGORIAS, nuevoEstado, nuevoEmisor } from "@/lib/tipos";
 import type { CanastaGuardada, Emisor, EstadoCanasta, ItemCanasta, Producto } from "@/lib/tipos";
+import { NIVELES, nivelPorCodigo } from "@/lib/niveles";
 import EditorCollage from "@/components/EditorCollage";
 import MaestroImagenes from "@/components/MaestroImagenes";
 
@@ -115,6 +116,16 @@ export default function Costeador({
     if (st.items.length && !confirm("Se limpiará la canasta actual. ¿Continuar?")) return;
     setSt(nuevoEstado());
     avisar("Canasta nueva lista");
+  }
+
+  function elegirNivel(codigo: string) {
+    const nivel = nivelPorCodigo(codigo);
+    setSt((s) => ({
+      ...s,
+      nivel: codigo,
+      margen: nivel ? nivel.margen : s.margen,
+      costoFijo: nivel ? nivel.costoFijo : 0,
+    }));
   }
 
   async function guardarCanastaActual() {
@@ -352,23 +363,36 @@ export default function Costeador({
               </div>
 
               <div className="card">
-                <div className="card-h"><h2>Armado y gastos</h2><span className="hint">{unidadesArmado(st.items)} ítems en la canasta · sugerido {S(armadoSugerido(st.items))}</span></div>
+                <div className="card-h"><h2>Nivel y gastos</h2><span className="hint">{unidadesArmado(st.items)} ítems en la canasta · armado sugerido {S(armadoSugerido(st.items))}</span></div>
                 <div className="card-b">
                   <div className="campos">
                     <div>
-                      <label>Costo de armado por canasta</label>
-                      <select value={String(armadoEfectivo)} onChange={(e) => setSt((s) => ({ ...s, armado: Number(e.target.value) || 5, armadoManual: true }))}>
-                        <option value="5">S/ 5.00 · hasta 8 ítems</option>
-                        <option value="10">S/ 10.00 · de 9 a 15 ítems</option>
-                        <option value="15">S/ 15.00 · 16 ítems a más</option>
+                      <label>Nivel de la canasta</label>
+                      <select value={st.nivel} onChange={(e) => elegirNivel(e.target.value)}>
+                        <option value="">Sin nivel (armado libre)</option>
+                        {NIVELES.map((n) => (
+                          <option key={n.codigo} value={n.codigo}>{n.nombre} · S/ {n.desde}-{n.hasta}</option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label>Gastos administrativos (5%)</label>
+                      <label>Costo de armado por canasta</label>
+                      <select value={String(armadoEfectivo)} onChange={(e) => setSt((s) => ({ ...s, armado: Number(e.target.value) || 5, armadoManual: true }))}>
+                        <option value="5">S/ 5.00 · hasta 12 ítems</option>
+                        <option value="10">S/ 10.00 · de 13 a 18 ítems</option>
+                        <option value="15">S/ 15.00 · 19 ítems a más</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Alquiler y gastos operativos</label>
+                      <input className="num" type="number" min={0} step={0.25} value={st.costoFijo} onChange={(e) => setSt((s) => ({ ...s, costoFijo: Number(e.target.value) || 0 }))} />
+                    </div>
+                    <div>
+                      <label>Gastos administrativos (3.5%)</label>
                       <input className="num" readOnly value={S(c.admin)} style={{ background: "var(--celeste-suave)", borderColor: "var(--celeste-borde)", fontWeight: 600 }} />
                     </div>
                   </div>
-                  <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--texto-suave)" }}>El 5% se calcula sobre el costo de productos más el armado. Se actualiza solo.</p>
+                  <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--texto-suave)" }}>Elegir un nivel llena el margen y el alquiler sugeridos; puedes ajustarlos después. El 3.5% se calcula sobre productos, armado y alquiler juntos.</p>
                 </div>
               </div>
 
@@ -415,7 +439,8 @@ export default function Costeador({
                   <ul className="cascada">
                     <FilaCascada et={"Productos" + (st.factura ? " sin IGV" : "")} vl={S(c.itemsBase)} />
                     <FilaCascada et="Armado" vl={S(c.armado)} tag={unidadesArmado(st.items) + " ítems"} />
-                    <FilaCascada et="Gastos administrativos 5%" vl={S(c.admin)} />
+                    {c.alquiler > 0 && <FilaCascada et="Alquiler y gastos operativos" vl={S(c.alquiler)} />}
+                    <FilaCascada et="Gastos administrativos 3.5%" vl={S(c.admin)} />
                     {c.otros > 0 && <FilaCascada et={"Otros costos" + (st.factura ? " sin IGV" : "")} vl={S(c.otrosBase)} />}
                     <FilaCascada et="Costo total por canasta" vl={S(c.costo)} fuerte />
                     <FilaCascada et="Utilidad antes de impuesto" vl={S(c.utilidad)} tag={pct(c.margenEfectivo) + " sobre venta"} />
@@ -694,7 +719,7 @@ function TabCatalogo({
 
   async function agregar() {
     if (!nom.trim()) return avisar("Escribe el nombre del producto");
-    const pref: Record<string, string> = { "Panetones": "PAN", "Vinos y espumantes": "VIN", "Licores": "LIC", "Chocolates y dulces": "CHO", "Galletas y snacks": "GAL", "Abarrotes": "ABA", "Conservas": "CON", "Lácteos": "LAC", "Gourmet": "GOU", "Empaque y bases": "EMP" };
+    const pref: Record<string, string> = { "Panetones": "PAN", "Vinos y espumantes": "VIN", "Chocolates y dulces": "CHO", "Galletas y snacks": "GAL", "Abarrotes": "ABA", "Conservas": "CON", "Lácteos": "LAC", "Gourmet": "GOU", "Empaque y bases": "EMP" };
     const p = pref[cat] || "GEN";
     const maxN = productos.reduce((max, x) => {
       if (!x.cod.startsWith(p + "-")) return max;

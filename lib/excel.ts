@@ -100,7 +100,8 @@ export async function generarExcel(st: EstadoCanasta) {
 
   const extras: [string, string, number][] = [
     ["Armado de la canasta", "Escala por " + unidadesArmado(st.items) + " ítems", c.armado],
-    ["Gastos administrativos", "5% sobre productos y armado", c.admin],
+    ...(c.alquiler > 0 ? ([["Alquiler y gastos operativos", "Costo fijo del nivel", c.alquiler]] as [string, string, number][]) : []),
+    ["Gastos administrativos", "3.5% sobre productos, armado y alquiler", c.admin],
     ...st.otros.map((o): [string, string, number] => [o.concepto || "Concepto sin nombre", "", Number(o.monto)]),
   ];
   extras.forEach((e, ix) => {
@@ -149,11 +150,12 @@ export async function generarExcel(st: EstadoCanasta) {
   const lineas: [string, number, number, string][] = [
     ["Productos", c.itemsBase, c.itemsBase * c.unidades, sinIgvTxt],
     ["Armado", c.armado, c.armado * c.unidades, "Escala por " + unidadesArmado(st.items) + " ítems en la canasta"],
-    ["Gastos administrativos", c.admin, c.admin * c.unidades, "5% sobre productos y armado"],
+    ["Alquiler y gastos operativos", c.alquiler, c.alquiler * c.unidades, "Costo fijo del nivel de la canasta"],
+    ["Gastos administrativos", c.admin, c.admin * c.unidades, "3.5% sobre productos, armado y alquiler"],
     ["Otros costos", c.otrosBase, c.otrosBase * c.unidades, st.otros.length ? sinIgvTxt : "Sin conceptos cargados"],
     ["Costo total por canasta", c.costo, c.totalCosto, "Base para calcular el margen"],
     ["Utilidad antes de impuesto", c.utilidad, c.totalUtilidad, "Margen " + pct(st.margen) + " sobre " + (st.tipoMargen === "venta" ? "venta" : "costo")],
-    ["Impuesto a la renta (RER) 1.5%", -c.ir, -c.totalIr, "1.5% de la venta"],
+    ["Impuesto a la renta (RER) 1.5%", -c.ir, -c.totalIr, "Ya trasladado al precio, no baja tu margen"],
     ["Utilidad neta", c.utilidadNeta, c.totalNeta, pct(c.margenNeto) + " sobre el precio de venta"],
     ["Precio de venta sin IGV", c.ventaFinal, c.ventaFinal * c.unidades, "Después del descuento"],
     ["IGV 18%", c.precioFinal - c.ventaFinal, (c.precioFinal - c.ventaFinal) * c.unidades, st.factura ? "Se traslada al cliente" : "No se discrimina"],

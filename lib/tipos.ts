@@ -40,6 +40,8 @@ export type EstadoCanasta = {
   otros: OtroCosto[];
   armado: number;
   armadoManual: boolean;
+  nivel: string;
+  costoFijo: number;
   margen: number;
   tipoMargen: "costo" | "venta";
   descuento: number;
@@ -65,7 +67,6 @@ export type CanastaGuardada = EstadoCanasta & {
 export const CATEGORIAS = [
   "Panetones",
   "Vinos y espumantes",
-  "Licores",
   "Chocolates y dulces",
   "Galletas y snacks",
   "Abarrotes",
@@ -105,6 +106,8 @@ export function nuevoEstado(): EstadoCanasta {
     otros: [],
     armado: 5,
     armadoManual: false,
+    nivel: "",
+    costoFijo: 0,
     margen: 30,
     tipoMargen: "costo",
     descuento: 0,
