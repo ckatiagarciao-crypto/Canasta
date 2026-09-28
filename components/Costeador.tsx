@@ -871,11 +871,6 @@ function TabCotizacion({
               <div><label>RUC</label><input value={emisor.ruc} onChange={(e) => onCambiarEmisor({ ruc: e.target.value })} placeholder="10108801994" /></div>
               <div><label>Teléfonos</label><input value={emisor.telefonos} onChange={(e) => onCambiarEmisor({ telefonos: e.target.value })} placeholder="970 418 062 · 985 319 051" /></div>
               <div><label>Correo</label><input value={emisor.correo} onChange={(e) => onCambiarEmisor({ correo: e.target.value })} placeholder="correo@empresa.com" /></div>
-              <div><label>Color de la cotización</label>
-                <select value={emisor.color} onChange={(e) => onCambiarEmisor({ color: e.target.value as "verde" | "azul" })}>
-                  <option value="verde">Verde</option><option value="azul">Azul</option>
-                </select>
-              </div>
               <div><label>Logo</label><input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) onSubirLogo(f); }} /></div>
             </div>
             <div style={{ marginTop: 12 }}>

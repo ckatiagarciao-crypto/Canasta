@@ -323,14 +323,13 @@ export async function obtenerEmisor(): Promise<Emisor> {
   const supabase = createClient();
   const { data, error } = await supabase.from("emisor").select("*").limit(1).maybeSingle();
   if (error) throw error;
-  if (!data) return { id: "", razon: "", ruc: "", telefonos: "", correo: "", color: "verde", logoUrl: "", cajaFondoPath: "" };
+  if (!data) return { id: "", razon: "", ruc: "", telefonos: "", correo: "", logoUrl: "", cajaFondoPath: "" };
   return {
     id: data.id,
     razon: data.razon ?? "",
     ruc: data.ruc ?? "",
     telefonos: data.telefonos ?? "",
     correo: data.correo ?? "",
-    color: (data.color as "verde" | "azul") ?? "verde",
     logoUrl: data.logo_url ?? "",
     cajaFondoPath: data.caja_fondo_url ?? "",
   };
@@ -343,7 +342,6 @@ export async function guardarEmisor(e: Emisor): Promise<Emisor> {
     ruc: e.ruc,
     telefonos: e.telefonos,
     correo: e.correo,
-    color: e.color,
     logo_url: e.logoUrl || null,
     caja_fondo_url: e.cajaFondoPath || null,
   };

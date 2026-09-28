@@ -50,7 +50,6 @@ export type Emisor = {
   ruc: string;
   telefonos: string;
   correo: string;
-  color: "verde" | "azul";
   logoUrl: string;
   cajaFondoPath: string;
 };
@@ -165,5 +164,5 @@ export function nuevoEstado(): EstadoCanasta {
 }
 
 export function nuevoEmisor(): Emisor {
-  return { id: "", razon: "", ruc: "", telefonos: "", correo: "", color: "verde", logoUrl: "", cajaFondoPath: "" };
+  return { id: "", razon: "", ruc: "", telefonos: "", correo: "", logoUrl: "", cajaFondoPath: "" };
 }
