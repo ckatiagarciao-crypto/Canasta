@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { unidadesArmado } from "@/lib/calculo";
 import { medirImagen } from "@/lib/imagen";
 import { firmantePorNombre } from "@/lib/firmantes";
 import { nivelPorCodigo } from "@/lib/niveles";
@@ -179,7 +180,7 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
     for (let c = 0; c < 5; c++) borde(cols[c], y, cols[c + 1] - cols[c], altoFilaR);
     t(String(ix + 1), centro(0), y + 7, AZUL, 9.5, "bold", "center");
     t(recortar("Canasta " + it.nombre, cols[2] - cols[1] - 5, 9.5, "bold"), cols[1] + 2.5, y + 5, NAVY, 9.5, "bold");
-    t((nivel ? nivel.nombre + "  ·  " : "") + it.items.length + " productos", cols[1] + 2.5, y + 9, TENUE, 7.8);
+    t((nivel ? nivel.nombre + "  ·  " : "") + unidadesArmado(it.items) + " productos", cols[1] + 2.5, y + 9, TENUE, 7.8);
     t(String(it.cantidad), centro(2), y + 7, TEXTO, 9, "normal", "center");
     t(monto(it.precioUnitario), centro(3), y + 7, TEXTO, 9, "normal", "center");
     t(monto(it.precioUnitario * it.cantidad), centro(4), y + 7, NAVY, 9.5, "bold", "center");
@@ -221,7 +222,7 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
     doc.setFontSize(9.5);
     const wNombre = doc.getTextWidth(nombre);
     t(nombre, L + 3, y + 5.8, BLANCO, 9.5, "bold");
-    t((nivel ? nivel.nombre + "  ·  " : "") + it.items.length + " productos", L + 3 + wNombre + 5, y + 5.8, SUBTITULO_BARRA, 8.5);
+    t((nivel ? nivel.nombre + "  ·  " : "") + unidadesArmado(it.items) + " productos", L + 3 + wNombre + 5, y + 5.8, SUBTITULO_BARRA, 8.5);
     t("S/ " + monto(it.precioUnitario) + " por unidad", R - 3, y + 5.8, BLANCO, 9.5, "bold", "right");
     y += altoBarra;
 
@@ -247,7 +248,11 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
       const x = ix < mitad ? xCol1 : xCol2;
       const fy = y + 6 + (ix < mitad ? ix : ix - mitad) * lh;
       t(p.cant, x + 3, fy, AZUL, 8.5, "bold");
-      t(recortar(p.nombre, anchoCol - 10, 8), x + 8, fy, TEXTO, 8);
+      const disponible = anchoCol - 10;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      const tam = Math.max(6.5, Math.min(8, (8 * disponible) / doc.getTextWidth(p.nombre)));
+      t(recortar(p.nombre, disponible, tam), x + 8, fy, TEXTO, tam);
     });
 
     y += altoCuerpo + 6;

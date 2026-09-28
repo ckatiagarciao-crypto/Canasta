@@ -488,7 +488,7 @@ export default function Costeador({
               </div>
 
               <div className="card">
-                <div className="card-h"><h2>Contenido de la canasta</h2><span className="hint">{st.items.length ? st.items.length + " productos" : ""}</span></div>
+                <div className="card-h"><h2>Contenido de la canasta</h2><span className="hint">{st.items.length ? unidadesArmado(st.items) + " productos" : ""}</span></div>
                 {!st.items.length ? (
                   <div className="vacio"><strong>Todavía no hay productos</strong>Elige del catálogo de arriba para empezar a costear.</div>
                 ) : (
@@ -814,7 +814,7 @@ function TabCotizacion({
                       onClick={() => onAgregarCanasta(h)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAgregarCanasta(h); } }}
                       style={yaAgregada ? { opacity: 0.5 } : undefined}>
-                      <span className="nom">{h.nombre || "Sin nombre"}<small>{h.items.length} productos{h.nivel ? " · " + h.nivel : ""}</small></span>
+                      <span className="nom">{h.nombre || "Sin nombre"}<small>{unidadesArmado(h.items)} productos{h.nivel ? " · " + h.nivel : ""}</small></span>
                       <span className="mas">{yaAgregada ? "✓" : "+"}</span>
                     </div>
                   );
@@ -835,7 +835,7 @@ function TabCotizacion({
                 <tbody>
                   {cotizacion.canastas.map((it, ix) => (
                     <tr key={ix}>
-                      <td>{it.nombre}<small style={{ display: "block", color: "var(--texto-suave)", fontSize: 11.5 }}>{it.items.length} productos</small></td>
+                      <td>{it.nombre}<small style={{ display: "block", color: "var(--texto-suave)", fontSize: 11.5 }}>{unidadesArmado(it.items)} productos</small></td>
                       <td className="num"><input className="w-cant num" type="number" min={1} step={1} value={it.cantidad} onChange={(e) => onActualizarCantidad(ix, Number(e.target.value) || 1)} /></td>
                       <td className="num">{S(it.precioUnitario)}</td>
                       <td className="num" style={{ fontWeight: 600 }}>{S(it.precioUnitario * it.cantidad)}</td>
@@ -1120,7 +1120,7 @@ function TabHistorial({
               <div className="hist" key={h.id}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="h-nom">{h.nombre || "Sin nombre"} <span className="chip">{h.codigo || "sin código"}</span></div>
-                  <div className="h-met">{h.items.length} productos · {h.unidades} {h.unidades === 1 ? "canasta" : "canastas"} · guardada el {new Date(h.creadaEn).toLocaleDateString("es-PE")}</div>
+                  <div className="h-met">{unidadesArmado(h.items)} productos · {h.unidades} {h.unidades === 1 ? "canasta" : "canastas"} · guardada el {new Date(h.creadaEn).toLocaleDateString("es-PE")}</div>
                 </div>
                 <button className="btn chico" onClick={() => onAbrir(h, false)}>Abrir</button>
                 <button className="btn chico" onClick={() => onAbrir(h, true)}>Duplicar</button>
