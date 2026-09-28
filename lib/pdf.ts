@@ -202,18 +202,46 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
   }
 
   // --- Detalle de las canastas ---
-  const primera = cot.canastas[0];
-  tituloSeccion("DETALLE DE LAS CANASTAS", 15 + Math.max(40, Math.ceil((primera.items.length + 1) / 2) * 5.2 + 6));
-  for (const it of cot.canastas) {
-    const nivel = nivelPorCodigo(it.nivel);
+  const anchoFoto = 42;
+  const xCol1 = L + anchoFoto;
+  const anchoCol = (R - xCol1) / 2;
+  const xCol2 = xCol1 + anchoCol;
+  const anchoNombre = anchoCol - 10;
+  // Mismo tamaño de letra para todos los productos; los nombres que no entran
+  // en una línea pasan a una segunda en vez de achicarse o cortarse.
+  const TAM_LISTA = 7.5;
+  const ALTO_LINEA = 3.4;
+  const ESPACIO_ITEM = 1.6;
+
+  function armarLista(it: Cotizacion["canastas"][number]) {
     const tieneCaja = it.items.some((p) => p.cod.startsWith("EMP"));
     const lista = it.items.map((p) => ({ cant: String(p.cantidad), nombre: p.nombre }));
     if (!tieneCaja) lista.push({ cant: "1", nombre: "Caja navideña con tapa y precinto" });
+    const filas = lista.map((p) => {
+      const lineas = partir(p.nombre, anchoNombre, TAM_LISTA);
+      return { ...p, lineas, alto: lineas.length * ALTO_LINEA + ESPACIO_ITEM };
+    });
+    // Se reparte en dos columnas por altura, no por cantidad de productos.
+    const total = filas.reduce((a, f) => a + f.alto, 0);
+    const col1: typeof filas = [];
+    const col2: typeof filas = [];
+    let acumulado = 0;
+    for (const f of filas) {
+      if (acumulado + f.alto / 2 <= total / 2 || !col1.length) {
+        col1.push(f);
+        acumulado += f.alto;
+      } else col2.push(f);
+    }
+    const altoCol = (c: typeof filas) => c.reduce((a, f) => a + f.alto, 0);
+    return { col1, col2, altoCuerpo: Math.max(40, Math.max(altoCol(col1), altoCol(col2)) + 7) };
+  }
 
-    const mitad = Math.ceil(lista.length / 2);
-    const lh = 5.2;
-    const altoBarra = 9;
-    const altoCuerpo = Math.max(40, mitad * lh + 6);
+  const altoBarra = 9;
+  tituloSeccion("DETALLE DE LAS CANASTAS", altoBarra + armarLista(cot.canastas[0]).altoCuerpo + 4);
+
+  for (const it of cot.canastas) {
+    const nivel = nivelPorCodigo(it.nivel);
+    const { col1, col2, altoCuerpo } = armarLista(it);
     asegurarEspacio(altoBarra + altoCuerpo + 4);
 
     relleno(L, y, ANCHO, altoBarra, NAVY);
@@ -226,10 +254,6 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
     t("S/ " + monto(it.precioUnitario) + " por unidad", R - 3, y + 5.8, BLANCO, 9.5, "bold", "right");
     y += altoBarra;
 
-    const anchoFoto = 42;
-    const xCol1 = L + anchoFoto;
-    const anchoCol = (R - xCol1) / 2;
-    const xCol2 = xCol1 + anchoCol;
     borde(L, y, anchoFoto, altoCuerpo);
     borde(xCol1, y, anchoCol, altoCuerpo);
     borde(xCol2, y, anchoCol, altoCuerpo);
@@ -244,15 +268,14 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
       t(["Espacio para la foto", "de la canasta"], L + anchoFoto / 2, y + altoCuerpo / 2 - 1.5, TENUE, 8, "italic", "center");
     }
 
-    lista.forEach((p, ix) => {
-      const x = ix < mitad ? xCol1 : xCol2;
-      const fy = y + 6 + (ix < mitad ? ix : ix - mitad) * lh;
-      t(p.cant, x + 3, fy, AZUL, 8.5, "bold");
-      const disponible = anchoCol - 10;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      const tam = Math.max(6.5, Math.min(8, (8 * disponible) / doc.getTextWidth(p.nombre)));
-      t(recortar(p.nombre, disponible, tam), x + 8, fy, TEXTO, tam);
+    [col1, col2].forEach((col, c) => {
+      const x = c === 0 ? xCol1 : xCol2;
+      let fy = y + 6;
+      for (const f of col) {
+        t(f.cant, x + 3, fy, AZUL, TAM_LISTA, "bold");
+        t(f.lineas, x + 8, fy, TEXTO, TAM_LISTA);
+        fy += f.alto;
+      }
     });
 
     y += altoCuerpo + 6;
@@ -260,9 +283,15 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
   t(partir("Todas las canastas se entregan en caja navideña de cartón con tapa y precinto de seguridad.", ANCHO, 8, "italic"), L, y, NOTA, 8, "italic");
   y += 11;
 
-  // --- Condiciones comerciales ---
+  // --- Condiciones comerciales, cierre y firma: siempre juntos, en la
+  // última hoja. Si no entran enteros en lo que queda de la hoja, pasan
+  // todos a una hoja nueva. ---
   const condiciones = (cot.condiciones || "").split("\n").map((s) => s.trim()).filter(Boolean);
-  tituloSeccion("CONDICIONES COMERCIALES");
+  const firmante = firmantePorNombre(cot.firmante);
+  const altoCondiciones = condiciones.reduce((a, c) => a + partir(c, ANCHO - 8, 9).length * 4.3 + 2.4, 0);
+  const altoCierre = 8 + 13 + (firmante ? 5 + 4.6 + 4 : 0);
+  asegurarEspacio(7 + altoCondiciones + 5 + altoCierre);
+  tituloSeccion("CONDICIONES COMERCIALES", 0);
   condiciones.forEach((c) => {
     const partes = partir(c, ANCHO - 8, 9);
     asegurarEspacio(partes.length * 4.3 + 2);
@@ -273,8 +302,6 @@ export async function generarCotizacionPDF(cot: Cotizacion, emisor: Emisor) {
   y += 5;
 
   // --- Cierre y firma ---
-  const firmante = firmantePorNombre(cot.firmante);
-  asegurarEspacio(36);
   t("Quedamos a su disposición para cualquier consulta o ajuste que requiera la propuesta.", L, y, TEXTO, 9);
   y += 8;
   t("Atentamente,", L, y, TEXTO, 9);
