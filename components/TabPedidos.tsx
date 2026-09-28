@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { S } from "@/lib/calculo";
 import { crearPedidos, actualizarPedido, eliminarPedido } from "@/lib/db";
+import { generarExcelPedidos } from "@/lib/excel";
 import { nivelPorCodigo } from "@/lib/niveles";
 import { costoPedido, requerimiento, resumenPorModelo, totalPedido, utilidadPedido, type ModoCompra } from "@/lib/pedidos";
 import { ESTADOS_PEDIDO, hoy } from "@/lib/tipos";
@@ -85,6 +86,15 @@ export default function TabPedidos({
     }
   }
 
+  async function descargarExcel() {
+    try {
+      await generarExcelPedidos(lista, productos, modo);
+      avisar("Excel descargado");
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : "No se pudo generar el Excel");
+    }
+  }
+
   const selectorModo = (
     <select value={modo} onChange={(e) => setModo(e.target.value as ModoCompra)} style={{ maxWidth: 260 }}>
       <option value="confirmados">Confirmados y entregados</option>
@@ -114,9 +124,10 @@ export default function TabPedidos({
               </select>
             </div>
           </div>
-          <button className="btn primario chico" onClick={agregar}>Agregar pedido</button>
+          <button className="btn primario chico" onClick={agregar}>Agregar pedido</button>{" "}
+          <button className="btn chico" onClick={descargarExcel} disabled={!lista.length}>Descargar Excel</button>
           <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--texto-suave)" }}>
-            También puedes crear pedidos desde una cotización guardada, con el botón &quot;Convertir en pedido&quot;. Deja el precio pactado vacío si cobras el de catálogo.
+            También puedes crear pedidos desde una cotización guardada, con el botón &quot;Convertir en pedido&quot;. Deja el precio pactado vacío si cobras el de catálogo. El Excel trae los pedidos, el control por modelo y la lista de compras, con el filtro de compra que tengas elegido abajo.
           </p>
         </div>
         <div className="card-b" style={{ paddingTop: 0, overflowX: "auto" }}>

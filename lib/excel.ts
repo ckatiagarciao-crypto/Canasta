@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
 import { calcular, pct, unidadesArmado, S } from "@/lib/calculo";
-import type { EstadoCanasta } from "@/lib/tipos";
+import { nivelPorCodigo } from "@/lib/niveles";
+import { costoPedido, requerimiento, resumenPorModelo, totalPedido, utilidadPedido, type ModoCompra } from "@/lib/pedidos";
+import type { EstadoCanasta, Pedido, Producto } from "@/lib/tipos";
 
 const NAVY = "FF08234A",
   AZUL = "FF1256D2",
@@ -282,13 +284,163 @@ export async function generarExcel(st: EstadoCanasta) {
   pie.alignment = { indent: 1, wrapText: true, vertical: "middle" };
   z.getRow(y).height = 26;
 
+  await descargar(wb, "Costeo " + (codigo !== "sin código" ? codigo + " " : "") + nombre);
+}
+
+async function descargar(wb: ExcelJS.Workbook, nombre: string) {
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "Costeo " + (codigo !== "sin código" ? codigo + " " : "") + nombre.replace(/[\\/:*?"<>|]/g, "") + ".xlsx";
+  a.download = nombre.replace(/[\\/:*?"<>|]/g, "") + ".xlsx";
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+type Formato = "texto" | "entero" | "moneda";
+type Columna = { titulo: string; ancho: number; formato: Formato };
+
+// Escribe una tabla con cabecera azul, filas alternadas en celeste y, si se
+// pasa, una fila de totales en azul marino. Devuelve la fila siguiente libre.
+function tabla(ws: ExcelJS.Worksheet, r: number, cols: Columna[], filas: (string | number | null)[][], total?: (string | number | null)[]): number {
+  cols.forEach((col, i) => {
+    const c = ws.getCell(r, i + 1);
+    c.value = col.titulo;
+    c.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
+    fondo(c, AZUL);
+    c.alignment = { vertical: "middle", horizontal: col.formato === "texto" ? "left" : "right", indent: 1, wrapText: true };
+    c.border = borde;
+  });
+  ws.getRow(r).height = 30;
+  r++;
+  const escribir = (valores: (string | number | null)[], estilo: (cell: ExcelJS.Cell) => void) => {
+    valores.forEach((v, i) => {
+      const c = ws.getCell(r, i + 1);
+      c.value = v;
+      c.border = borde;
+      if (cols[i].formato === "moneda") c.numFmt = MONEDA;
+      if (cols[i].formato === "entero") c.numFmt = "#,##0";
+      c.alignment = { vertical: "middle", horizontal: cols[i].formato === "texto" ? "left" : "right", indent: 1 };
+      estilo(c);
+    });
+    r++;
+  };
+  filas.forEach((f, ix) => escribir(f, (c) => {
+    c.font = { size: 10 };
+    if (ix % 2 === 1) fondo(c, CELESTE);
+  }));
+  if (total) escribir(total, (c) => {
+    c.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
+    fondo(c, NAVY);
+  });
+  return r;
+}
+
+function hojaConTitulo(wb: ExcelJS.Workbook, nombre: string, titular: string, cols: Columna[]) {
+  const ws = wb.addWorksheet(nombre, { views: [{ showGridLines: false }] });
+  ws.columns = cols.map((c) => ({ width: c.ancho }));
+  titulo(ws, titular, cols.length);
+  return ws;
+}
+
+const suma = <T,>(xs: T[], f: (x: T) => number) => xs.reduce((a, x) => a + f(x), 0);
+
+export async function generarExcelPedidos(pedidos: Pedido[], productos: Producto[], modo: ModoCompra) {
+  if (!pedidos.length) throw new Error("Aún no hay pedidos para descargar");
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Costeador de Canastas Navideñas";
+  wb.created = new Date();
+  const fecha = (f: string) => (f ? f.split("-").reverse().join("/") : "");
+  const nivel = (n: string) => nivelPorCodigo(n)?.nombre ?? "";
+  const modoTxt = modo === "todo" ? "Todo lo registrado (incluye cotizados)" : "Confirmados y entregados";
+
+  const colsPed: Columna[] = [
+    { titulo: "Fecha", ancho: 12, formato: "texto" },
+    { titulo: "Cliente", ancho: 24, formato: "texto" },
+    { titulo: "Canasta", ancho: 28, formato: "texto" },
+    { titulo: "Nivel", ancho: 22, formato: "texto" },
+    { titulo: "Cantidad", ancho: 11, formato: "entero" },
+    { titulo: "P. catálogo", ancho: 14, formato: "moneda" },
+    { titulo: "P. pactado", ancho: 14, formato: "moneda" },
+    { titulo: "Total", ancho: 16, formato: "moneda" },
+    { titulo: "Costo", ancho: 16, formato: "moneda" },
+    { titulo: "Utilidad", ancho: 16, formato: "moneda" },
+    { titulo: "Estado", ancho: 13, formato: "texto" },
+  ];
+  const wp = hojaConTitulo(wb, "Pedidos", "REGISTRO DE PEDIDOS", colsPed);
+  const vigentes = pedidos.filter((p) => p.estado !== "Anulado");
+  tabla(
+    wp,
+    3,
+    colsPed,
+    pedidos.map((p) => [fecha(p.fecha), p.cliente, p.canastaNombre, nivel(p.nivel), p.cantidad, p.precioCatalogo, p.precioPactado, totalPedido(p), costoPedido(p), utilidadPedido(p), p.estado]),
+    ["Total sin anulados", "", "", "", suma(vigentes, (p) => p.cantidad), null, null, suma(vigentes, totalPedido), suma(vigentes, costoPedido), suma(vigentes, utilidadPedido), ""]
+  );
+
+  const colsMod: Columna[] = [
+    { titulo: "Canasta", ancho: 28, formato: "texto" },
+    { titulo: "Nivel", ancho: 22, formato: "texto" },
+    { titulo: "Cotizadas", ancho: 12, formato: "entero" },
+    { titulo: "Confirmadas", ancho: 13, formato: "entero" },
+    { titulo: "Entregadas", ancho: 12, formato: "entero" },
+    { titulo: "Total", ancho: 10, formato: "entero" },
+    { titulo: "Para compra", ancho: 13, formato: "entero" },
+    { titulo: "Venta", ancho: 16, formato: "moneda" },
+    { titulo: "Costo", ancho: 16, formato: "moneda" },
+    { titulo: "Utilidad", ancho: 16, formato: "moneda" },
+  ];
+  const wm = hojaConTitulo(wb, "Control por modelo", "CONTROL DE UNIDADES POR MODELO", colsMod);
+  metaFila(wm, 3, "Comprar en base a", modoTxt, 6);
+  const modelos = resumenPorModelo(pedidos, modo);
+  tabla(
+    wm,
+    5,
+    colsMod,
+    modelos.map((m) => [m.nombre, nivel(m.nivel), m.cotizadas, m.confirmadas, m.entregadas, m.total, m.paraCompra, m.venta, m.costo, m.utilidad]),
+    ["Total", "", suma(modelos, (m) => m.cotizadas), suma(modelos, (m) => m.confirmadas), suma(modelos, (m) => m.entregadas), suma(modelos, (m) => m.total), suma(modelos, (m) => m.paraCompra), suma(modelos, (m) => m.venta), suma(modelos, (m) => m.costo), suma(modelos, (m) => m.utilidad)]
+  );
+
+  const colsCom: Columna[] = [
+    { titulo: "Código", ancho: 10, formato: "texto" },
+    { titulo: "Producto", ancho: 44, formato: "texto" },
+    { titulo: "Proveedor", ancho: 14, formato: "texto" },
+    { titulo: "Und necesarias", ancho: 13, formato: "entero" },
+    { titulo: "Und x caja", ancho: 11, formato: "entero" },
+    { titulo: "Cajas a comprar", ancho: 13, formato: "entero" },
+    { titulo: "Und que recibes", ancho: 13, formato: "entero" },
+    { titulo: "Sobrante", ancho: 11, formato: "entero" },
+    { titulo: "P. unit.", ancho: 12, formato: "moneda" },
+    { titulo: "Costo necesario", ancho: 16, formato: "moneda" },
+    { titulo: "Costo de compra", ancho: 16, formato: "moneda" },
+  ];
+  const wc = hojaConTitulo(wb, "Lista de compras", "NECESIDAD DE PRODUCTOS", colsCom);
+  metaFila(wc, 3, "Comprar en base a", modoTxt, 6);
+  const { lineas, proveedores } = requerimiento(pedidos, productos, modo);
+  const colsProv: Columna[] = [
+    { titulo: "Proveedor", ancho: 10, formato: "texto" },
+    { titulo: "", ancho: 44, formato: "texto" },
+    { titulo: "Cajas", ancho: 14, formato: "entero" },
+    { titulo: "Costo de compra", ancho: 13, formato: "moneda" },
+  ];
+  // El resumen por proveedor ocupa columnas A-D: el nombre en A:B unidas.
+  const r = tabla(
+    wc,
+    5,
+    colsProv,
+    proveedores.map((p) => [p.proveedor, "", p.cajas, p.costoCompra]),
+    ["Total", "", suma(proveedores, (p) => p.cajas), suma(proveedores, (p) => p.costoCompra)]
+  );
+  for (let f = 5; f < r; f++) wc.mergeCells(f, 1, f, 2);
+  tabla(
+    wc,
+    r + 1,
+    colsCom,
+    lineas.map((l) => [l.cod, l.nombre, l.proveedor, l.necesarias, l.porCaja, l.cajas, l.recibes, l.sobrante, l.precioUnitario, l.costoNecesario, l.costoCompra]),
+    ["Total", "", "", suma(lineas, (l) => l.necesarias), null, suma(lineas, (l) => l.cajas), suma(lineas, (l) => l.recibes), suma(lineas, (l) => l.sobrante), null, suma(lineas, (l) => l.costoNecesario), suma(lineas, (l) => l.costoCompra)]
+  );
+
+  const hoy = new Date();
+  await descargar(wb, "Pedidos y compras " + [hoy.getDate(), hoy.getMonth() + 1, hoy.getFullYear()].map((n) => String(n).padStart(2, "0")).join("-"));
 }
