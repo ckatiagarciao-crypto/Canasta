@@ -70,6 +70,7 @@ export type ItemCotizacion = {
   // Costo por canasta sin IGV al momento de cotizar; 0 en cotizaciones
   // guardadas antes de que existiera este campo.
   costoUnitario: number;
+  factura: boolean;
   items: ItemCanasta[];
   fotoUrl: string;
 };
@@ -89,6 +90,7 @@ export type Pedido = {
   precioCatalogo: number;
   precioPactado: number | null;
   costoUnitario: number;
+  factura: boolean;
   items: ItemCanasta[];
   estado: EstadoPedido;
 };

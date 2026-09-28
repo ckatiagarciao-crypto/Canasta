@@ -133,7 +133,7 @@ export default function Costeador({
 
   function precioYCostoDeCanasta(h: CanastaGuardada) {
     const calc = calcular({ ...h, armado: h.armadoManual ? h.armado : armadoSugerido(h.items) });
-    return { precio: calc.precioFinal, costo: calc.costo };
+    return { precio: calc.precioFinal, costo: calc.costo, factura: h.factura };
   }
 
   function cambiarTab(t: Tab) {
@@ -267,8 +267,7 @@ export default function Costeador({
       avisar("Esa canasta ya está en la cotización");
       return;
     }
-    const armadoEf = h.armadoManual ? h.armado : armadoSugerido(h.items);
-    const calc = calcular({ ...h, armado: armadoEf });
+    const { precio, costo, factura } = precioYCostoDeCanasta(h);
     setCotizacion((s) => ({
       ...s,
       canastas: [
@@ -278,8 +277,9 @@ export default function Costeador({
           nombre: h.nombre,
           nivel: h.nivel,
           cantidad: h.unidades || 1,
-          precioUnitario: calc.precioFinal,
-          costoUnitario: calc.costo,
+          precioUnitario: precio,
+          costoUnitario: costo,
+          factura,
           items: h.items,
           fotoUrl: h.fotoUrl,
         },
@@ -343,6 +343,10 @@ export default function Costeador({
     if (actuales === null) return;
     if (actuales.some((p) => p.cotizacionId === cotizacion.id) && !confirm("Esta cotización ya tiene pedidos registrados. ¿Crear otros de nuevo?")) return;
     try {
+      // Se guarda primero, para que los pedidos salgan de lo mismo que
+      // quedó guardado en la cotización.
+      await guardarCotizacion(cotizacion);
+      setCotizaciones(null);
       const creados = await crearPedidos(
         cotizacion.canastas.map((it) => {
           const original = historial?.find((h) => h.id === it.canastaId);
@@ -358,6 +362,7 @@ export default function Costeador({
             precioCatalogo: it.precioUnitario,
             precioPactado: null,
             costoUnitario: costo,
+            factura: it.factura,
             items: it.items,
             estado: "Confirmado" as const,
           };
@@ -365,7 +370,11 @@ export default function Costeador({
       );
       setPedidos([...creados, ...actuales]);
       setTab("pedidos");
-      avisar(creados.length === 1 ? "Pedido creado como Confirmado" : creados.length + " pedidos creados como Confirmados");
+      if (creados.some((p) => !p.costoUnitario)) {
+        avisar("Pedido creado, pero alguna canasta no tiene costo (se borró del historial). Su utilidad no es confiable.");
+      } else {
+        avisar(creados.length === 1 ? "Pedido creado como Confirmado" : creados.length + " pedidos creados como Confirmados");
+      }
     } catch {
       avisar("No se pudo crear el pedido");
     }

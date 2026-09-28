@@ -17,7 +17,7 @@ export default function TabPedidos({
   setPedidos: React.Dispatch<React.SetStateAction<Pedido[] | null>>;
   historial: CanastaGuardada[] | null;
   productos: Producto[];
-  costoDeCanasta: (h: CanastaGuardada) => { precio: number; costo: number };
+  costoDeCanasta: (h: CanastaGuardada) => { precio: number; costo: number; factura: boolean };
   avisar: (m: string) => void;
 }) {
   const [modo, setModo] = useState<ModoCompra>("confirmados");
@@ -35,7 +35,7 @@ export default function TabPedidos({
     const h = historial?.find((x) => x.id === canastaId);
     if (!h) return avisar("Elige una canasta guardada");
     if (!cliente.trim()) return avisar("Escribe el cliente");
-    const { precio, costo } = costoDeCanasta(h);
+    const { precio, costo, factura } = costoDeCanasta(h);
     try {
       const [creado] = await crearPedidos([
         {
@@ -49,6 +49,7 @@ export default function TabPedidos({
           precioCatalogo: precio,
           precioPactado: null,
           costoUnitario: costo,
+          factura,
           items: h.items,
           estado,
         },
@@ -62,13 +63,13 @@ export default function TabPedidos({
     }
   }
 
-  async function cambiar(p: Pedido, cambios: Partial<Pedido>) {
-    const nuevo = { ...p, ...cambios };
-    setPedidos((ps) => (ps ? ps.map((x) => (x.id === p.id ? nuevo : x)) : ps));
+  async function cambiar(p: Pedido, cambios: Partial<Omit<Pedido, "id">>) {
+    const previo = Object.fromEntries(Object.keys(cambios).map((k) => [k, p[k as keyof Pedido]])) as Partial<Pedido>;
+    setPedidos((ps) => (ps ? ps.map((x) => (x.id === p.id ? { ...x, ...cambios } : x)) : ps));
     try {
-      await actualizarPedido(nuevo);
+      await actualizarPedido(p.id, cambios);
     } catch {
-      setPedidos((ps) => (ps ? ps.map((x) => (x.id === p.id ? p : x)) : ps));
+      setPedidos((ps) => (ps ? ps.map((x) => (x.id === p.id ? { ...x, ...previo } : x)) : ps));
       avisar("No se pudo guardar el cambio, se deshizo");
     }
   }
@@ -131,19 +132,19 @@ export default function TabPedidos({
                   <th className="num" style={{ width: 80 }}>Cant.</th>
                   <th className="num">P. catálogo</th>
                   <th className="num" style={{ width: 104 }}>P. pactado</th>
-                  <th className="num">Total c/IGV</th><th className="num">Costo</th><th className="num">Utilidad</th>
+                  <th className="num">Total</th><th className="num">Costo</th><th className="num">Utilidad</th>
                   <th style={{ width: 136 }}>Estado</th><th style={{ width: 34 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {lista.map((p) => (
                   <tr key={p.id} style={p.estado === "Anulado" ? { opacity: 0.5 } : undefined}>
-                    <td><input type="date" value={p.fecha} onChange={(e) => cambiar(p, { fecha: e.target.value })} /></td>
-                    <td><input defaultValue={p.cliente} onBlur={(e) => e.target.value !== p.cliente && cambiar(p, { cliente: e.target.value })} /></td>
+                    <td><input type="date" value={p.fecha} onChange={(e) => e.target.value && cambiar(p, { fecha: e.target.value })} /></td>
+                    <td><input key={"c" + p.cliente} defaultValue={p.cliente} onBlur={(e) => e.target.value !== p.cliente && cambiar(p, { cliente: e.target.value })} /></td>
                     <td>{p.canastaNombre}<small style={{ display: "block", color: "var(--texto-suave)", fontSize: 11.5 }}>{nivelPorCodigo(p.nivel)?.nombre ?? ""}</small></td>
-                    <td className="num"><input className="w-cant num" type="number" min={1} step={1} defaultValue={p.cantidad} onBlur={(e) => { const v = Math.max(1, Math.round(Number(e.target.value)) || 1); if (v !== p.cantidad) cambiar(p, { cantidad: v }); }} /></td>
+                    <td className="num"><input key={"n" + p.cantidad} className="w-cant num" type="number" min={1} step={1} defaultValue={p.cantidad} onBlur={(e) => { const v = Math.max(1, Math.round(Number(e.target.value)) || 1); if (v !== p.cantidad) cambiar(p, { cantidad: v }); }} /></td>
                     <td className="num">{S(p.precioCatalogo)}</td>
-                    <td className="num"><input className="num" type="number" min={0} step={0.1} defaultValue={p.precioPactado ?? ""} placeholder="—" onBlur={(e) => { const v = e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0); if (v !== p.precioPactado) cambiar(p, { precioPactado: v }); }} /></td>
+                    <td className="num"><input key={"pp" + p.precioPactado} className="num" type="number" min={0} step={0.1} defaultValue={p.precioPactado ?? ""} placeholder="—" onBlur={(e) => { const v = e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0); if (v !== p.precioPactado) cambiar(p, { precioPactado: v }); }} /></td>
                     <td className="num" style={{ fontWeight: 600 }}>{S(totalPedido(p))}</td>
                     <td className="num">{S(costoPedido(p))}</td>
                     <td className="num">{S(utilidadPedido(p))}</td>

@@ -116,6 +116,7 @@ create table pedidos (
   precio_catalogo numeric(10,2) not null default 0,
   precio_pactado numeric(10,2),
   costo_unitario numeric(12,4) not null default 0,
+  factura boolean not null default true,
   items jsonb not null default '[]'::jsonb,
   estado text not null default 'Cotizado'
     check (estado in ('Cotizado', 'Confirmado', 'Entregado', 'Anulado')),

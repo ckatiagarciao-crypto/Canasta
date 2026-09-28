@@ -1,4 +1,4 @@
-import { IGV, RENTA } from "./calculo";
+import { utilidadNetaDeVenta } from "./calculo";
 import type { Pedido, Producto } from "./tipos";
 
 export type ModoCompra = "confirmados" | "todo";
@@ -15,10 +15,8 @@ export function costoPedido(p: Pedido): number {
   return p.cantidad * p.costoUnitario;
 }
 
-// Igual que la hoja PEDIDOS: venta sin IGV, menos el impuesto a la renta,
-// menos el costo.
 export function utilidadPedido(p: Pedido): number {
-  return (totalPedido(p) / (1 + IGV)) * (1 - RENTA) - costoPedido(p);
+  return utilidadNetaDeVenta(totalPedido(p), costoPedido(p), p.factura);
 }
 
 export function cuentaParaCompra(p: Pedido, modo: ModoCompra): boolean {

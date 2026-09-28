@@ -15,6 +15,7 @@ function pedido(cambios: Partial<Pedido> = {}): Pedido {
     precioCatalogo: 299.9,
     precioPactado: null,
     costoUnitario: 200.53198093220342,
+    factura: true,
     items: [],
     estado: "Confirmado",
     ...cambios,
@@ -34,6 +35,11 @@ describe("pedidos", () => {
   it("calcula la utilidad igual que la hoja PEDIDOS del Excel", () => {
     // Fila de ejemplo del Excel: Equimag, 60 canastas a S/ 300 pactado.
     expect(utilidadPedido(pedido({ precioPactado: 300 }))).toBeCloseTo(2993.5048728813545, 4);
+  });
+
+  it("no quita IGV a la venta si la canasta no emite factura", () => {
+    const sinFactura = utilidadPedido(pedido({ precioPactado: 300, factura: false }));
+    expect(sinFactura).toBeCloseTo(18000 * (1 - 0.015) - 60 * 200.53198093220342, 4);
   });
 
   it("resume por modelo separando estados y excluyendo anulados de venta y total", () => {

@@ -273,7 +273,7 @@ function filaACotizacion(f: FilaCotizacion): CotizacionGuardada {
     campana: f.campana ?? "",
     condiciones: f.condiciones ?? "",
     firmante: f.firmante ?? "",
-    canastas: (f.canastas ?? []).map((c) => ({ ...c, costoUnitario: Number(c.costoUnitario ?? 0) })),
+    canastas: (f.canastas ?? []).map((c) => ({ ...c, costoUnitario: Number(c.costoUnitario ?? 0), factura: c.factura ?? true })),
     creadaEn: f.created_at,
   };
 }
@@ -331,6 +331,7 @@ type FilaPedido = {
   precio_catalogo: number;
   precio_pactado: number | null;
   costo_unitario: number;
+  factura: boolean;
   items: Pedido["items"];
   estado: EstadoPedido;
 };
@@ -348,26 +349,28 @@ function filaAPedido(f: FilaPedido): Pedido {
     precioCatalogo: Number(f.precio_catalogo),
     precioPactado: f.precio_pactado == null ? null : Number(f.precio_pactado),
     costoUnitario: Number(f.costo_unitario),
+    factura: f.factura,
     items: f.items ?? [],
     estado: f.estado,
   };
 }
 
-function pedidoAFila(p: Omit<Pedido, "id">) {
-  return {
-    fecha: p.fecha || null,
-    cliente: p.cliente,
-    cotizacion_id: p.cotizacionId || null,
-    canasta_id: p.canastaId || null,
-    canasta_nombre: p.canastaNombre,
-    nivel: p.nivel || null,
-    cantidad: Math.max(1, Math.round(Number(p.cantidad) || 1)),
-    precio_catalogo: p.precioCatalogo,
-    precio_pactado: p.precioPactado,
-    costo_unitario: p.costoUnitario,
-    items: p.items,
-    estado: p.estado,
-  };
+function pedidoAFila(p: Partial<Omit<Pedido, "id">>) {
+  const fila: Record<string, unknown> = {};
+  if (p.fecha !== undefined) fila.fecha = p.fecha || null;
+  if (p.cliente !== undefined) fila.cliente = p.cliente;
+  if (p.cotizacionId !== undefined) fila.cotizacion_id = p.cotizacionId || null;
+  if (p.canastaId !== undefined) fila.canasta_id = p.canastaId || null;
+  if (p.canastaNombre !== undefined) fila.canasta_nombre = p.canastaNombre;
+  if (p.nivel !== undefined) fila.nivel = p.nivel || null;
+  if (p.cantidad !== undefined) fila.cantidad = Math.max(1, Math.round(Number(p.cantidad) || 1));
+  if (p.precioCatalogo !== undefined) fila.precio_catalogo = p.precioCatalogo;
+  if (p.precioPactado !== undefined) fila.precio_pactado = p.precioPactado;
+  if (p.costoUnitario !== undefined) fila.costo_unitario = p.costoUnitario;
+  if (p.factura !== undefined) fila.factura = p.factura;
+  if (p.items !== undefined) fila.items = p.items;
+  if (p.estado !== undefined) fila.estado = p.estado;
+  return fila;
 }
 
 export async function listarPedidos(): Promise<Pedido[]> {
@@ -384,9 +387,11 @@ export async function crearPedidos(pedidos: Omit<Pedido, "id">[]): Promise<Pedid
   return (data as unknown as FilaPedido[]).map(filaAPedido);
 }
 
-export async function actualizarPedido(p: Pedido): Promise<void> {
+// Solo se mandan los campos que cambiaron, para no pisar lo que otra
+// usuaria haya editado en el mismo pedido.
+export async function actualizarPedido(id: string, cambios: Partial<Omit<Pedido, "id">>): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase.from("pedidos").update(pedidoAFila(p)).eq("id", p.id);
+  const { error } = await supabase.from("pedidos").update(pedidoAFila(cambios)).eq("id", id);
   if (error) throw error;
 }
 

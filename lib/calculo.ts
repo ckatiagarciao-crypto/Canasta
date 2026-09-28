@@ -25,6 +25,13 @@ export function excesoDeCaja(
   return null;
 }
 
+// Utilidad neta de una venta al precio final que paga el cliente: se quita
+// el IGV si hay factura, y luego el costo y el impuesto a la renta (RER).
+export function utilidadNetaDeVenta(precioCliente: number, costo: number, factura: boolean): number {
+  const venta = factura ? precioCliente / (1 + IGV) : precioCliente;
+  return venta - costo - Math.max(venta, 0) * RENTA;
+}
+
 export function armadoSugerido(items: EstadoCanasta["items"]): number {
   const n = unidadesArmado(items);
   return n <= 12 ? 5 : n <= 18 ? 10 : 15;
@@ -90,7 +97,7 @@ export function calcular(st: EstadoCanasta): ResultadoCalculo {
   const ventaFinal = st.factura ? precioFinal / (1 + IGV) : precioFinal;
   const utilidad = ventaFinal - costo;
   const ir = Math.max(ventaFinal, 0) * RENTA;
-  const utilidadNeta = utilidad - ir;
+  const utilidadNeta = utilidadNetaDeVenta(precioFinal, costo, st.factura);
   const margenEfectivo = ventaFinal > 0 ? (utilidad / ventaFinal) * 100 : 0;
   const margenNeto = ventaFinal > 0 ? (utilidadNeta / ventaFinal) * 100 : 0;
   const u = Math.max(1, Math.round(Number(st.unidades) || 1));
