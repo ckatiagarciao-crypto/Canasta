@@ -64,8 +64,30 @@ export type ItemCotizacion = {
   nivel: string;
   cantidad: number;
   precioUnitario: number;
+  // Costo por canasta sin IGV al momento de cotizar; 0 en cotizaciones
+  // guardadas antes de que existiera este campo.
+  costoUnitario: number;
   items: ItemCanasta[];
   fotoUrl: string;
+};
+
+export const ESTADOS_PEDIDO = ["Cotizado", "Confirmado", "Entregado", "Anulado"] as const;
+export type EstadoPedido = (typeof ESTADOS_PEDIDO)[number];
+
+export type Pedido = {
+  id: string;
+  fecha: string;
+  cliente: string;
+  cotizacionId: string;
+  canastaId: string;
+  canastaNombre: string;
+  nivel: string;
+  cantidad: number;
+  precioCatalogo: number;
+  precioPactado: number | null;
+  costoUnitario: number;
+  items: ItemCanasta[];
+  estado: EstadoPedido;
 };
 
 export type Cotizacion = {

@@ -17,6 +17,8 @@ import {
   guardarCanasta,
   eliminarCanasta,
   listarCotizaciones,
+  listarPedidos,
+  crearPedidos,
   guardarCotizacion,
   eliminarCotizacion,
   obtenerEmisor,
@@ -26,15 +28,16 @@ import {
   subirCajaFondo,
   urlsFirmadas,
 } from "@/lib/db";
-import { CATEGORIAS, nuevoEstado, nuevoEmisor, nuevaCotizacion } from "@/lib/tipos";
-import type { CanastaGuardada, Cotizacion, CotizacionGuardada, Emisor, EstadoCanasta, ItemCanasta, Producto } from "@/lib/tipos";
+import { CATEGORIAS, hoy, nuevoEstado, nuevoEmisor, nuevaCotizacion } from "@/lib/tipos";
+import type { CanastaGuardada, Cotizacion, CotizacionGuardada, Emisor, EstadoCanasta, ItemCanasta, Pedido, Producto } from "@/lib/tipos";
 import { NIVELES, nivelPorCodigo } from "@/lib/niveles";
 import { PLANTILLAS, plantillaPorCodigo } from "@/lib/plantillas";
 import { FIRMANTES } from "@/lib/firmantes";
 import EditorCollage from "@/components/EditorCollage";
 import MaestroImagenes from "@/components/MaestroImagenes";
+import TabPedidos from "@/components/TabPedidos";
 
-type Tab = "armar" | "cotizacion" | "catalogo" | "historial";
+type Tab = "armar" | "cotizacion" | "pedidos" | "catalogo" | "historial";
 
 export default function Costeador({
   productosIniciales,
@@ -51,6 +54,7 @@ export default function Costeador({
   const [historial, setHistorial] = useState<CanastaGuardada[] | null>(null);
   const [cotizacion, setCotizacion] = useState<Cotizacion>(nuevaCotizacion());
   const [cotizaciones, setCotizaciones] = useState<CotizacionGuardada[] | null>(null);
+  const [pedidos, setPedidos] = useState<Pedido[] | null>(null);
   const [toast, setToast] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [guardandoCot, setGuardandoCot] = useState(false);
@@ -115,13 +119,30 @@ export default function Costeador({
     }
   }
 
+  async function cargarPedidos(): Promise<Pedido[] | null> {
+    try {
+      const p = await listarPedidos();
+      setPedidos(p);
+      return p;
+    } catch {
+      avisar("No se pudo cargar los pedidos");
+      return null;
+    }
+  }
+
+  function precioYCostoDeCanasta(h: CanastaGuardada) {
+    const calc = calcular({ ...h, armado: h.armadoManual ? h.armado : armadoSugerido(h.items) });
+    return { precio: calc.precioFinal, costo: calc.costo };
+  }
+
   function cambiarTab(t: Tab) {
     setTab(t);
     if (t === "historial") {
       if (historial === null) cargarHistorial();
       if (cotizaciones === null) cargarCotizaciones();
     }
-    if (t === "cotizacion" && historial === null) cargarHistorial();
+    if ((t === "cotizacion" || t === "pedidos") && historial === null) cargarHistorial();
+    if (t === "pedidos" && pedidos === null) cargarPedidos();
   }
 
   function agregarProducto(p: Producto) {
@@ -257,6 +278,7 @@ export default function Costeador({
           nivel: h.nivel,
           cantidad: h.unidades || 1,
           precioUnitario: calc.precioFinal,
+          costoUnitario: calc.costo,
           items: h.items,
           fotoUrl: h.fotoUrl,
         },
@@ -311,6 +333,40 @@ export default function Costeador({
       avisar("Cotización eliminada");
     } catch {
       avisar("No se pudo eliminar");
+    }
+  }
+
+  async function convertirCotizacionEnPedido() {
+    if (!cotizacion.id) return avisar("Guarda la cotización antes de convertirla en pedido");
+    const actuales = pedidos ?? (await cargarPedidos());
+    if (actuales === null) return;
+    if (actuales.some((p) => p.cotizacionId === cotizacion.id) && !confirm("Esta cotización ya tiene pedidos registrados. ¿Crear otros de nuevo?")) return;
+    try {
+      const creados = await crearPedidos(
+        cotizacion.canastas.map((it) => {
+          const original = historial?.find((h) => h.id === it.canastaId);
+          const costo = it.costoUnitario || (original ? precioYCostoDeCanasta(original).costo : 0);
+          return {
+            fecha: hoy(),
+            cliente: cotizacion.empresa,
+            cotizacionId: cotizacion.id,
+            canastaId: it.canastaId,
+            canastaNombre: it.nombre,
+            nivel: it.nivel,
+            cantidad: it.cantidad,
+            precioCatalogo: it.precioUnitario,
+            precioPactado: null,
+            costoUnitario: costo,
+            items: it.items,
+            estado: "Confirmado" as const,
+          };
+        })
+      );
+      setPedidos([...creados, ...actuales]);
+      setTab("pedidos");
+      avisar(creados.length === 1 ? "Pedido creado como Confirmado" : creados.length + " pedidos creados como Confirmados");
+    } catch {
+      avisar("No se pudo crear el pedido");
     }
   }
 
@@ -426,6 +482,7 @@ export default function Costeador({
         <div className="tabs" role="tablist">
           <button className="tab" role="tab" aria-selected={tab === "armar"} onClick={() => cambiarTab("armar")}>Armar canasta</button>
           <button className="tab" role="tab" aria-selected={tab === "cotizacion"} onClick={() => cambiarTab("cotizacion")}>Cotización</button>
+          <button className="tab" role="tab" aria-selected={tab === "pedidos"} onClick={() => cambiarTab("pedidos")}>Pedidos</button>
           <button className="tab" role="tab" aria-selected={tab === "catalogo"} onClick={() => cambiarTab("catalogo")}>Catálogo</button>
           <button className="tab" role="tab" aria-selected={tab === "historial"} onClick={() => cambiarTab("historial")}>Historial</button>
         </div>
@@ -676,6 +733,7 @@ export default function Costeador({
             onNueva={nuevaCotizacionActual}
             onGuardar={guardarCotizacionActual}
             onDescargarPDF={descargarCotizacionPDF}
+            onConvertirEnPedido={convertirCotizacionEnPedido}
             onSubirLogo={subirLogoEmisor}
             onCambiarEmisor={guardarCambiosEmisor}
           />
@@ -683,6 +741,11 @@ export default function Costeador({
 
         {tab === "catalogo" && (
           <TabCatalogo productos={productos} setProductos={setProductos} avisar={avisar} />
+        )}
+
+        {tab === "pedidos" && (
+          <TabPedidos pedidos={pedidos} setPedidos={setPedidos} historial={historial} productos={productos}
+            costoDeCanasta={precioYCostoDeCanasta} avisar={avisar} />
         )}
 
         {tab === "historial" && (
@@ -746,7 +809,7 @@ function FilaCascada({ et, vl, tag, fuerte }: { et: string; vl: string; tag?: st
 
 function TabCotizacion({
   cotizacion, setCotizacion, historial, emisor, guardando,
-  onAgregarCanasta, onActualizarCantidad, onQuitarCanasta, onNueva, onGuardar, onDescargarPDF,
+  onAgregarCanasta, onActualizarCantidad, onQuitarCanasta, onNueva, onGuardar, onDescargarPDF, onConvertirEnPedido,
   onSubirLogo, onCambiarEmisor,
 }: {
   cotizacion: Cotizacion;
@@ -760,6 +823,7 @@ function TabCotizacion({
   onNueva: () => void;
   onGuardar: () => void;
   onDescargarPDF: () => void;
+  onConvertirEnPedido: () => void;
   onSubirLogo: (f: File) => void;
   onCambiarEmisor: (cambios: Partial<Emisor>) => void;
 }) {
@@ -899,6 +963,10 @@ function TabCotizacion({
               {guardando ? "Guardando..." : "Guardar cotización"}
             </button>
             <button className="btn primario" style={{ width: "100%", marginTop: 8 }} onClick={onDescargarPDF}>Descargar PDF de la cotización</button>
+            <button className="btn" style={{ width: "100%", marginTop: 8 }} onClick={onConvertirEnPedido} disabled={!cotizacion.id || !cotizacion.canastas.length}
+              title={cotizacion.id ? "Crea un pedido Confirmado por cada canasta" : "Primero guarda la cotización"}>
+              Convertir en pedido
+            </button>
             <button className="btn chico plano" style={{ width: "100%", marginTop: 8 }} onClick={onNueva}>Nueva cotización</button>
             <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--texto-suave)" }}>
               El PDF sale con el formato corporativo: resumen de las canastas, detalle de cada una con su foto y productos, condiciones comerciales y la firma de quien la envía.

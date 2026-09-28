@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { CATALOGO_BASE } from "@/lib/catalogoBase";
 import { recortarMargenes } from "@/lib/imagen";
-import type { CanastaGuardada, Cotizacion, CotizacionGuardada, Emisor, EstadoCanasta, Producto } from "@/lib/tipos";
+import type { CanastaGuardada, Cotizacion, CotizacionGuardada, Emisor, EstadoCanasta, EstadoPedido, Pedido, Producto } from "@/lib/tipos";
 
 const BUCKET_FOTOS = "fotos-productos";
 const PATH_CAJA_FONDO_PREFIJO = "_fondo-caja";
@@ -273,7 +273,7 @@ function filaACotizacion(f: FilaCotizacion): CotizacionGuardada {
     campana: f.campana ?? "",
     condiciones: f.condiciones ?? "",
     firmante: f.firmante ?? "",
-    canastas: f.canastas ?? [],
+    canastas: (f.canastas ?? []).map((c) => ({ ...c, costoUnitario: Number(c.costoUnitario ?? 0) })),
     creadaEn: f.created_at,
   };
 }
@@ -316,6 +316,83 @@ export async function guardarCotizacion(cot: Cotizacion): Promise<string> {
 export async function eliminarCotizacion(id: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("cotizaciones").delete().eq("id", id);
+  if (error) throw error;
+}
+
+type FilaPedido = {
+  id: string;
+  fecha: string | null;
+  cliente: string | null;
+  cotizacion_id: string | null;
+  canasta_id: string | null;
+  canasta_nombre: string;
+  nivel: string | null;
+  cantidad: number;
+  precio_catalogo: number;
+  precio_pactado: number | null;
+  costo_unitario: number;
+  items: Pedido["items"];
+  estado: EstadoPedido;
+};
+
+function filaAPedido(f: FilaPedido): Pedido {
+  return {
+    id: f.id,
+    fecha: f.fecha ?? "",
+    cliente: f.cliente ?? "",
+    cotizacionId: f.cotizacion_id ?? "",
+    canastaId: f.canasta_id ?? "",
+    canastaNombre: f.canasta_nombre,
+    nivel: f.nivel ?? "",
+    cantidad: Number(f.cantidad),
+    precioCatalogo: Number(f.precio_catalogo),
+    precioPactado: f.precio_pactado == null ? null : Number(f.precio_pactado),
+    costoUnitario: Number(f.costo_unitario),
+    items: f.items ?? [],
+    estado: f.estado,
+  };
+}
+
+function pedidoAFila(p: Omit<Pedido, "id">) {
+  return {
+    fecha: p.fecha || null,
+    cliente: p.cliente,
+    cotizacion_id: p.cotizacionId || null,
+    canasta_id: p.canastaId || null,
+    canasta_nombre: p.canastaNombre,
+    nivel: p.nivel || null,
+    cantidad: Math.max(1, Math.round(Number(p.cantidad) || 1)),
+    precio_catalogo: p.precioCatalogo,
+    precio_pactado: p.precioPactado,
+    costo_unitario: p.costoUnitario,
+    items: p.items,
+    estado: p.estado,
+  };
+}
+
+export async function listarPedidos(): Promise<Pedido[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("pedidos").select("*").order("fecha", { ascending: false }).order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as unknown as FilaPedido[]).map(filaAPedido);
+}
+
+export async function crearPedidos(pedidos: Omit<Pedido, "id">[]): Promise<Pedido[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("pedidos").insert(pedidos.map(pedidoAFila)).select();
+  if (error) throw error;
+  return (data as unknown as FilaPedido[]).map(filaAPedido);
+}
+
+export async function actualizarPedido(p: Pedido): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("pedidos").update(pedidoAFila(p)).eq("id", p.id);
+  if (error) throw error;
+}
+
+export async function eliminarPedido(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("pedidos").delete().eq("id", id);
   if (error) throw error;
 }
 

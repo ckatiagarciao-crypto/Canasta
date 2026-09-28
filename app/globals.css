@@ -131,3 +131,8 @@ td input{padding:6px 8px;border-radius:8px}
 .toast.ver{opacity:1;transform:translate(-50%,0)}
 @media (max-width:900px){.grid{grid-template-columns:1fr}.sticky{position:static}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.tabla-montos td.num,
+.tabla-montos th.num {
+  white-space: nowrap;
+}

@@ -95,12 +95,37 @@ create table cotizaciones (
   updated_at timestamptz not null default now()
 );
 
+-- Registro de pedidos (hoja PEDIDOS del Excel): una fila por canasta y
+-- cliente. Guarda el contenido de la canasta tal cual estaba al registrar
+-- el pedido ("items"), para que la lista de compras no cambie si luego se
+-- edita o borra la canasta original.
+create table pedidos (
+  id uuid primary key default gen_random_uuid(),
+  fecha date,
+  cliente text,
+  cotizacion_id uuid references cotizaciones(id) on delete set null,
+  canasta_id uuid,
+  canasta_nombre text not null,
+  nivel text,
+  cantidad integer not null default 1,
+  precio_catalogo numeric(10,2) not null default 0,
+  precio_pactado numeric(10,2),
+  costo_unitario numeric(12,4) not null default 0,
+  items jsonb not null default '[]'::jsonb,
+  estado text not null default 'Cotizado'
+    check (estado in ('Cotizado', 'Confirmado', 'Entregado', 'Anulado')),
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table productos enable row level security;
 alter table emisor enable row level security;
 alter table canastas enable row level security;
 alter table canasta_items enable row level security;
 alter table canasta_otros enable row level security;
 alter table cotizaciones enable row level security;
+alter table pedidos enable row level security;
 
 create policy "equipo autenticado usa productos" on productos
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
@@ -114,6 +139,8 @@ create policy "equipo autenticado usa canasta_otros" on canasta_otros
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "equipo autenticado usa cotizaciones" on cotizaciones
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "equipo autenticado usa pedidos" on pedidos
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- IMPORTANTE: como el proyecto se creó con "Automatically expose new tables"
 -- apagado (a propósito, para no dejar nada abierto sin querer), las tablas
@@ -126,6 +153,7 @@ grant select, insert, update, delete on canasta_items to authenticated;
 grant select, insert, update, delete on canasta_otros to authenticated;
 grant select, insert, update, delete on emisor to authenticated;
 grant select, insert, update, delete on cotizaciones to authenticated;
+grant select, insert, update, delete on pedidos to authenticated;
 
 -- El catálogo base va aparte, en lib/catalogoBase.ts (mismos datos, en
 -- TypeScript). Si hay que volver a cargarlo a mano, usar ese archivo como
