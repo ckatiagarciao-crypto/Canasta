@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { calcular, armadoSugerido, unidadesArmado, S, pct } from "@/lib/calculo";
+import { calcular, armadoSugerido, excesoDeCaja, unidadesArmado, S, pct } from "@/lib/calculo";
 import { comprimir } from "@/lib/imagen";
 import { generarCotizacionPDF } from "@/lib/pdf";
 import { generarExcel } from "@/lib/excel";
@@ -100,6 +100,7 @@ export default function Costeador({
   );
   const stCalculo = useMemo(() => ({ ...st, armado: armadoEfectivo }), [st, armadoEfectivo]);
   const c = useMemo(() => calcular(stCalculo), [stCalculo]);
+  const exceso = useMemo(() => excesoDeCaja(st.items, productos), [st.items, productos]);
 
   async function cargarHistorial() {
     try {
@@ -574,6 +575,13 @@ export default function Costeador({
                         </tbody>
                       </table>
                     </div>
+                    {exceso && (
+                      <div className="card-b" style={{ paddingTop: 0 }}>
+                        <div className="aviso" style={{ margin: 0 }}>
+                          <b>No entra en la caja.</b> La canasta lleva {exceso.dentro} productos y {exceso.caja} admite {exceso.capacidad}. Cambia a una caja más grande o quita productos.
+                        </div>
+                      </div>
+                    )}
                     <div className="total-pie" style={{ borderRadius: "0 0 var(--r) var(--r)" }}>
                       <span>Costo de productos por canasta, con IGV</span><b>{S(c.items)}</b>
                     </div>
@@ -1037,7 +1045,7 @@ function TabCatalogo({
     let punitVal = punit || 0;
     if (!punitVal && pcaja) punitVal = +(pcaja / cajaVal).toFixed(2);
     try {
-      const creado = await crearProducto({ cod: p + "-" + String(n).padStart(2, "0"), nombre: nom.trim(), proveedor: prov.trim() || "Sin proveedor", categoria: cat, caja: cajaVal, precio_caja: pcaja, precio_unitario: punitVal, foto_url: "" });
+      const creado = await crearProducto({ cod: p + "-" + String(n).padStart(2, "0"), nombre: nom.trim(), proveedor: prov.trim() || "Sin proveedor", categoria: cat, caja: cajaVal, precio_caja: pcaja, precio_unitario: punitVal, foto_url: "", capacidad: null, medidas: null });
       setProductos((ps) => [...ps, creado].sort((a, b) => a.cod.localeCompare(b.cod)));
       setNom(""); setProv(""); setCaja(1); setPcaja(0); setPunit(0);
       avisar("Producto agregado al catálogo");
@@ -1120,7 +1128,7 @@ function TabCatalogo({
                   )}
                 </td>
                 <td style={{ color: "var(--azul)", fontWeight: 650, fontSize: 11.5 }}>{p.cod}</td>
-                <td>{p.nombre}<small style={{ display: "block", color: "var(--texto-suave)", fontSize: 11.5 }}>{p.categoria}</small></td>
+                <td>{p.nombre}<small style={{ display: "block", color: "var(--texto-suave)", fontSize: 11.5 }}>{p.categoria}{p.capacidad ? " · hasta " + p.capacidad + " productos" : ""}{p.medidas ? " · " + p.medidas + " cm" : ""}</small></td>
                 <td style={{ color: "var(--texto-suave)" }}>{p.proveedor}</td>
                 <td className="num">{p.caja}</td>
                 <td className="num"><input className="num" type="number" min={0} step={0.01} defaultValue={p.precio_caja.toFixed(2)} onBlur={(e) => editar(p, "precio_caja", Number(e.target.value) || 0)} /></td>

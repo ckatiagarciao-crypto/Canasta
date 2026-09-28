@@ -8,6 +8,9 @@ export type Producto = {
   precio_caja: number;
   precio_unitario: number;
   foto_url: string;
+  // Solo para cajas y cestos (hoja CAJAS del Excel).
+  capacidad: number | null;
+  medidas: string | null;
 };
 
 export type ItemCanasta = {

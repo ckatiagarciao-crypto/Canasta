@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcular, unidadesArmado, armadoSugerido, RENTA } from "./calculo";
+import { calcular, unidadesArmado, armadoSugerido, excesoDeCaja, RENTA } from "./calculo";
 import { nuevoEstado } from "./tipos";
 import type { EstadoCanasta } from "./tipos";
 
@@ -166,5 +166,20 @@ describe("calcular", () => {
       descuento: 100,
     });
     expect(calcular(st).precioFinal).toBe(0);
+  });
+});
+
+describe("excesoDeCaja", () => {
+  const cajas = [{ cod: "EMP-01", nombre: "CAJA NAVIDEÑA 1A", capacidad: 25 }];
+  const item = (cod: string, cantidad: number) => ({ cod, nombre: cod, proveedor: "", precio_unitario: 1, cantidad });
+
+  it("no avisa si los productos entran en la caja (la caja no se cuenta)", () => {
+    expect(excesoDeCaja([item("ABA-01", 25), item("EMP-01", 1)], cajas)).toBeNull();
+  });
+  it("avisa cuando los productos superan la capacidad de la caja", () => {
+    expect(excesoDeCaja([item("ABA-01", 26), item("EMP-01", 1)], cajas)).toEqual({ caja: "CAJA NAVIDEÑA 1A", capacidad: 25, dentro: 26 });
+  });
+  it("no avisa si la canasta no lleva caja con capacidad conocida", () => {
+    expect(excesoDeCaja([item("ABA-01", 99)], cajas)).toBeNull();
   });
 });

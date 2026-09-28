@@ -1,4 +1,4 @@
-export const CATALOGO_BASE = [
+const PRODUCTOS = [
   { cod: 'ABA-01', nombre: 'CHOCOLATE DE TAZA ORO DE CUSCO 80GR', proveedor: 'Grazy', categoria: 'Abarrotes', caja: 50, precio_caja: 45, precio_unitario: 0.9 },
   { cod: 'ABA-02', nombre: 'ARROZ COSTEÑO EXTRA GRANEADO 750GR', proveedor: 'Grazy', categoria: 'Abarrotes', caja: 20, precio_caja: 67, precio_unitario: 3.35 },
   { cod: 'ABA-03', nombre: 'AZUCAR DULFINA 1KG', proveedor: 'Grazy', categoria: 'Abarrotes', caja: 10, precio_caja: 35, precio_unitario: 3.5 },
@@ -63,3 +63,25 @@ export const CATALOGO_BASE = [
   { cod: 'VIN-04', nombre: 'TRAPICHE ASTICA CABERNET SAUVIGNON MALBEC 750ML', proveedor: 'Perufarma', categoria: 'Vinos y espumantes', caja: 12, precio_caja: 266.4, precio_unitario: 22.2 },
   { cod: 'VIN-05', nombre: 'COLECCIÓN PRIVADA MALBEC X 750 ML', proveedor: 'Perufarma', categoria: 'Vinos y espumantes', caja: 6, precio_caja: 253.2, precio_unitario: 42.2 },
 ];
+
+// Hoja CAJAS del Excel: cuántos productos entran en cada caja y sus medidas
+// (largo x ancho x alto, en cm).
+const CAJAS: Record<string, { capacidad: number | null; medidas: string }> = {
+  'EMP-01': { capacidad: 25, medidas: '36.5 x 24.1 x 30.5' },
+  'EMP-02': { capacidad: 25, medidas: '36.5 x 24.1 x 30.5' },
+  'EMP-03': { capacidad: 35, medidas: '37 x 24.4 x 34.6' },
+  'EMP-04': { capacidad: 35, medidas: '39 x 29.5 x 23' },
+  'EMP-05': { capacidad: 40, medidas: '42 x 32 x 31.5' },
+  'EMP-06': { capacidad: null, medidas: '49 x 32 x 25' },
+  'EMP-07': { capacidad: null, medidas: '45 x 34 x 44.3' },
+  'EMP-08': { capacidad: null, medidas: '40 x 29.6 x 49' },
+  'EMP-09': { capacidad: null, medidas: '51.2 x 55.3 x 29.5' },
+  'EMP-10': { capacidad: null, medidas: '41 x 28.5 x 22.5' },
+  'EMP-11': { capacidad: null, medidas: '48 x 35 x 26' },
+};
+
+export const CATALOGO_BASE = PRODUCTOS.map((p) => ({
+  ...p,
+  capacidad: CAJAS[p.cod]?.capacidad ?? null,
+  medidas: CAJAS[p.cod]?.medidas ?? null,
+}));

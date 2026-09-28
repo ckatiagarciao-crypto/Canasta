@@ -11,6 +11,11 @@ create table productos (
   caja integer not null default 1,
   precio_caja numeric(10,2),
   precio_unitario numeric(10,2) not null,
+  foto_url text,
+  -- Solo para cajas y cestos (hoja CAJAS): cuántos productos entran y sus
+  -- medidas en cm.
+  capacidad integer,
+  medidas text,
   created_at timestamptz not null default now()
 );
 

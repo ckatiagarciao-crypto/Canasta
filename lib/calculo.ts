@@ -1,4 +1,4 @@
-import type { EstadoCanasta } from "./tipos";
+import type { EstadoCanasta, Producto } from "./tipos";
 
 export const IGV = 0.18;
 export const ADMIN = 0.035;
@@ -9,6 +9,20 @@ export const RENTA = 0.015;
 
 export function unidadesArmado(items: EstadoCanasta["items"]): number {
   return items.reduce((a, i) => a + (Number(i.cantidad) || 0), 0);
+}
+
+// Si la canasta lleva una caja con capacidad conocida (hoja CAJAS), avisa
+// cuando los productos que van dentro superan lo que entra en ella.
+export function excesoDeCaja(
+  items: EstadoCanasta["items"],
+  productos: Pick<Producto, "cod" | "nombre" | "capacidad">[]
+): { caja: string; capacidad: number; dentro: number } | null {
+  const dentro = unidadesArmado(items.filter((i) => !i.cod.startsWith("EMP")));
+  for (const i of items) {
+    const caja = productos.find((p) => p.cod === i.cod);
+    if (caja?.capacidad && dentro > caja.capacidad) return { caja: caja.nombre, capacidad: caja.capacidad, dentro };
+  }
+  return null;
 }
 
 export function armadoSugerido(items: EstadoCanasta["items"]): number {

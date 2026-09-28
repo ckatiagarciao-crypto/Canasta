@@ -22,7 +22,7 @@ function pedido(cambios: Partial<Pedido> = {}): Pedido {
 }
 
 function producto(cod: string, caja: number, precio: number, proveedor = "Grazy"): Producto {
-  return { id: cod, cod, nombre: cod, proveedor, categoria: "Abarrotes", caja, precio_caja: caja * precio, precio_unitario: precio, foto_url: "" };
+  return { id: cod, cod, nombre: cod, proveedor, categoria: "Abarrotes", caja, precio_caja: caja * precio, precio_unitario: precio, foto_url: "", capacidad: null, medidas: null };
 }
 
 describe("pedidos", () => {
